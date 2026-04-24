@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `e876072` Reuse release bundle across publish modes
+- `a9e039e` Fetch downstream sync branch before push
 
 ## Scoped Paths
 
@@ -280,4 +280,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `providers/ubuntu/main.go`
 - `test/acceptance/fixtures/smoke/main.tf`
 
-_Generated at 2026-04-24T19:27:57Z._
+_Generated at 2026-04-24T20:05:53Z._
