@@ -1,0 +1,283 @@
+# ubuntu v0.1.82
+
+Generated automatically from the provider manifest and scoped git history.
+
+## Release Summary
+
+- Provider address: `registry.terraform.io/hashicorp/ubuntu`
+- Lifecycle: `beta`
+- Support policy: `ubuntu-beta`
+- Release tag: `ubuntu/v0.1.82`
+- Previous tag: none discovered
+- Local smoke lane: `acceptance:smoke`
+- Support-matrix fixture: `smoke`
+- Release platforms: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`, `windows/arm64`
+
+## Public Surface Snapshot
+
+- Resources: `kubeadm_bootstrap_ready`, `kubeadm_cluster_ready`, `kubeadm_control_plane`, `kubeadm_worker`, `reboot_barrier`, `ubuntu_apt_repository`, `ubuntu_command`, `ubuntu_crontab_entry`, `ubuntu_file`, `ubuntu_fstab_entry`, `ubuntu_group`, `ubuntu_hosts_entry`, `ubuntu_kernel_modules`, `ubuntu_network_stack`, `ubuntu_package`, `ubuntu_package_lock`, `ubuntu_sshd_config`, `ubuntu_swap`, `ubuntu_symlink`, `ubuntu_sysctl_entry`, `ubuntu_systemd_unit`, `ubuntu_timezone`, `ubuntu_tls_identity`, `ubuntu_trusted_cert`, `ubuntu_ufw_rule`, `ubuntu_user`
+- Data sources: `ubuntu_file_info`, `ubuntu_mounts`, `ubuntu_network_interfaces`, `ubuntu_os_release`, `ubuntu_system_info`, `ubuntu_systemd_unit_info`
+- Actions: `restart_host`, `ubuntu_restart_process`, `ubuntu_run_command`
+
+## Scoped Commits
+
+- `a9f498e` Split downstream sync and publish release
+
+## Scoped Paths
+
+- `core/catalog/debian_apt.go`
+- `core/catalog/debian_trust.go`
+- `core/catalog/import_identity.go`
+- `core/catalog/import_identity_test.go`
+- `core/catalog/linux_commands.go`
+- `core/catalog/linux_facts.go`
+- `core/catalog/linux_files.go`
+- `core/catalog/linux_identity.go`
+- `core/catalog/linux_kubeadm.go`
+- `core/catalog/linux_lifecycle.go`
+- `core/catalog/linux_network.go`
+- `core/catalog/linux_packages.go`
+- `core/catalog/linux_tls.go`
+- `core/catalog/locks.go`
+- `core/catalog/locks_test.go`
+- `core/catalog/modules.go`
+- `core/catalog/provider.go`
+- `core/catalog/provider_manifest.go`
+- `core/catalog/resource_policies.go`
+- `core/catalog/resource_policies_test.go`
+- `core/catalog/systemd.go`
+- `core/catalog/ubuntu.go`
+- `core/catalog/ubuntu_ufw.go`
+- `core/distro/detect.go`
+- `core/distro/families.go`
+- `core/engine/adapter_helpers.go`
+- `core/engine/adapter_helpers_test.go`
+- `core/engine/destroy_safety.go`
+- `core/engine/destroy_safety_test.go`
+- `core/engine/entry_action.go`
+- `core/engine/entry_datasource.go`
+- `core/engine/entry_resource.go`
+- `core/engine/entry_resource_test.go`
+- `core/engine/hashed_string.go`
+- `core/engine/hashed_string_test.go`
+- `core/engine/kubeadm_bootstrap_ready_resource.go`
+- `core/engine/kubeadm_cluster_ready_resource.go`
+- `core/engine/kubeadm_cluster_ready_resource_test.go`
+- `core/engine/kubeadm_resource.go`
+- `core/engine/kubeadm_resource_test.go`
+- `core/engine/locks.go`
+- `core/engine/reboot_barrier_resource.go`
+- `core/engine/resource_identity.go`
+- `core/engine/resource_identity_test.go`
+- `core/engine/state_helpers.go`
+- `core/engine/state_helpers_test.go`
+- `core/engine/types.go`
+- `core/executor/host_readiness.go`
+- `core/executor/ids.go`
+- `core/executor/locks.go`
+- `core/executor/manager.go`
+- `core/executor/manager_test.go`
+- `core/executor/operation_tracking.go`
+- `core/executor/process_exists_other.go`
+- `core/executor/process_exists_unix.go`
+- `core/executor/protocol.go`
+- `core/executor/reboot_platform.go`
+- `core/executor/reboot_types.go`
+- `core/executor/restart_host.go`
+- `core/executor/restart_host_test.go`
+- `core/executor/session_runtime.go`
+- `core/executor/session_runtime_test.go`
+- `core/provider/base.go`
+- `core/provider/runtime_assets.go`
+- `core/provider/version.go`
+- `core/provider/version_test.go`
+- `core/providerdocs/generate.go`
+- `core/providerdocs/generate_test.go`
+- `core/providerdocs/server.go`
+- `core/providerdocs/server_test.go`
+- `core/transport/local.go`
+- `core/transport/logging.go`
+- `core/transport/pool.go`
+- `core/transport/pool_test.go`
+- `core/transport/ssh.go`
+- `core/transport/ssh_test.go`
+- `core/transport/transport.go`
+- `executor/execlog/logging.go`
+- `executor/execlog/logging_test.go`
+- `executor/go.mod`
+- `executor/go.sum`
+- `executor/host/api.go`
+- `executor/host/apt.go`
+- `executor/host/apt_test.go`
+- `executor/host/cmdexec.go`
+- `executor/host/cmdexec_test.go`
+- `executor/host/discovery.go`
+- `executor/host/discovery_linux.go`
+- `executor/host/discovery_other.go`
+- `executor/host/execution.go`
+- `executor/host/fileops.go`
+- `executor/host/fileops_test.go`
+- `executor/host/fileops_wasm.go`
+- `executor/host/parsers.go`
+- `executor/host/parsers_test.go`
+- `executor/host/types.go`
+- `executor/main.go`
+- `executor/runtime/dispatch.go`
+- `executor/runtime/dispatch_test.go`
+- `executor/runtime/journal_key.go`
+- `executor/runtime/journal_test.go`
+- `executor/runtime/operation_journal.go`
+- `executor/runtime/process_exists_other.go`
+- `executor/runtime/process_exists_unix.go`
+- `executor/runtime/reboot_journal.go`
+- `executor/runtime/restart_journal.go`
+- `executor/runtime/restart_journal_stub.go`
+- `executor/runtime/shared_journal_lock_other.go`
+- `executor/runtime/shared_journal_lock_unix.go`
+- `executor/runtime/wasm.go`
+- `executor/runtime/wasm_integration_test.go`
+- `executor/runtime/wasm_test.go`
+- `plugins/debian/apt_repository/go.mod`
+- `plugins/debian/apt_repository/main.go`
+- `plugins/debian/apt_repository/main_test.go`
+- `plugins/debian/trusted_cert/go.mod`
+- `plugins/debian/trusted_cert/main.go`
+- `plugins/debian/trusted_cert/main_test.go`
+- `plugins/linux/commands/go.mod`
+- `plugins/linux/commands/main.go`
+- `plugins/linux/commands/main_test.go`
+- `plugins/linux/facts/go.mod`
+- `plugins/linux/facts/main.go`
+- `plugins/linux/facts/main_test.go`
+- `plugins/linux/files_config/crontab.go`
+- `plugins/linux/files_config/crontab_test.go`
+- `plugins/linux/files_config/go.mod`
+- `plugins/linux/files_config/main.go`
+- `plugins/linux/files_config/main_test.go`
+- `plugins/linux/identity/go.mod`
+- `plugins/linux/identity/main.go`
+- `plugins/linux/identity/main_test.go`
+- `plugins/linux/kubeadm/go.mod`
+- `plugins/linux/kubeadm/main.go`
+- `plugins/linux/packages/go.mod`
+- `plugins/linux/packages/main.go`
+- `plugins/linux/packages/main_test.go`
+- `plugins/linux/tls_identity/go.mod`
+- `plugins/linux/tls_identity/main.go`
+- `plugins/linux/tls_identity/main_test.go`
+- `plugins/systemd/services/go.mod`
+- `plugins/systemd/services/main.go`
+- `plugins/systemd/services/main_test.go`
+- `plugins/ubuntu/ufw/go.mod`
+- `plugins/ubuntu/ufw/main.go`
+- `plugins/ubuntu/ufw/main_test.go`
+- `pluginsdk/command_helpers.go`
+- `pluginsdk/contracts/debianapt/schema.go`
+- `pluginsdk/contracts/linuxcommands/schema.go`
+- `pluginsdk/contracts/linuxfacts/schema.go`
+- `pluginsdk/contracts/linuxfiles/schema.go`
+- `pluginsdk/contracts/linuxidentity/schema.go`
+- `pluginsdk/contracts/linuxnetwork/schema.go`
+- `pluginsdk/contracts/linuxpackages/schema.go`
+- `pluginsdk/contracts/linuxtls/schema.go`
+- `pluginsdk/contracts/redhatdnf/schema.go`
+- `pluginsdk/contracts/redhatfirewalld/schema.go`
+- `pluginsdk/contracts/systemd/schema.go`
+- `pluginsdk/contracts/trustedcert/schema.go`
+- `pluginsdk/contracts/ubuntuufw/schema.go`
+- `pluginsdk/go.mod`
+- `pluginsdk/sdk.go`
+- `pluginsdk/sdk_test.go`
+- `pluginsdk/ssh_bindings.go`
+- `pluginsdk/types.go`
+- `pluginsdk/types_test.go`
+- `pluginsdk/wasm_exports.go`
+- `pluginsdk/wasm_exports_tinygo.go`
+- `providers/debian/assets_embed.go`
+- `providers/debian/assets_embed_test.go`
+- `providers/debian/docs/actions/restart_host.md`
+- `providers/debian/docs/actions/restart_process.md`
+- `providers/debian/docs/actions/run_command.md`
+- `providers/debian/docs/data-sources/file_info.md`
+- `providers/debian/docs/data-sources/mounts.md`
+- `providers/debian/docs/data-sources/network_interfaces.md`
+- `providers/debian/docs/data-sources/os_release.md`
+- `providers/debian/docs/data-sources/system_info.md`
+- `providers/debian/docs/data-sources/systemd_unit_info.md`
+- `providers/debian/docs/index.md`
+- `providers/debian/docs/resources/apt_repository.md`
+- `providers/debian/docs/resources/command.md`
+- `providers/debian/docs/resources/crontab_entry.md`
+- `providers/debian/docs/resources/file.md`
+- `providers/debian/docs/resources/fstab_entry.md`
+- `providers/debian/docs/resources/group.md`
+- `providers/debian/docs/resources/hosts_entry.md`
+- `providers/debian/docs/resources/kernel_modules.md`
+- `providers/debian/docs/resources/kubeadm_bootstrap_ready.md`
+- `providers/debian/docs/resources/kubeadm_cluster_ready.md`
+- `providers/debian/docs/resources/kubeadm_control_plane.md`
+- `providers/debian/docs/resources/kubeadm_worker.md`
+- `providers/debian/docs/resources/network_stack.md`
+- `providers/debian/docs/resources/package.md`
+- `providers/debian/docs/resources/package_lock.md`
+- `providers/debian/docs/resources/reboot_barrier.md`
+- `providers/debian/docs/resources/sshd_config.md`
+- `providers/debian/docs/resources/swap.md`
+- `providers/debian/docs/resources/symlink.md`
+- `providers/debian/docs/resources/sysctl_entry.md`
+- `providers/debian/docs/resources/systemd_unit.md`
+- `providers/debian/docs/resources/timezone.md`
+- `providers/debian/docs/resources/tls_identity.md`
+- `providers/debian/docs/resources/trusted_cert.md`
+- `providers/debian/docs/resources/user.md`
+- `providers/debian/embeddata/README.md`
+- `providers/debian/embeddata/manifest.json`
+- `providers/debian/go.mod`
+- `providers/debian/go.sum`
+- `providers/debian/main.go`
+- `providers/ubuntu/assets_embed.go`
+- `providers/ubuntu/assets_embed_test.go`
+- `providers/ubuntu/docs/actions/restart_host.md`
+- `providers/ubuntu/docs/actions/restart_process.md`
+- `providers/ubuntu/docs/actions/run_command.md`
+- `providers/ubuntu/docs/data-sources/file_info.md`
+- `providers/ubuntu/docs/data-sources/mounts.md`
+- `providers/ubuntu/docs/data-sources/network_interfaces.md`
+- `providers/ubuntu/docs/data-sources/os_release.md`
+- `providers/ubuntu/docs/data-sources/system_info.md`
+- `providers/ubuntu/docs/data-sources/systemd_unit_info.md`
+- `providers/ubuntu/docs/index.md`
+- `providers/ubuntu/docs/resources/apt_repository.md`
+- `providers/ubuntu/docs/resources/command.md`
+- `providers/ubuntu/docs/resources/crontab_entry.md`
+- `providers/ubuntu/docs/resources/file.md`
+- `providers/ubuntu/docs/resources/fstab_entry.md`
+- `providers/ubuntu/docs/resources/group.md`
+- `providers/ubuntu/docs/resources/hosts_entry.md`
+- `providers/ubuntu/docs/resources/kernel_modules.md`
+- `providers/ubuntu/docs/resources/kubeadm_bootstrap_ready.md`
+- `providers/ubuntu/docs/resources/kubeadm_cluster_ready.md`
+- `providers/ubuntu/docs/resources/kubeadm_control_plane.md`
+- `providers/ubuntu/docs/resources/kubeadm_worker.md`
+- `providers/ubuntu/docs/resources/network_stack.md`
+- `providers/ubuntu/docs/resources/package.md`
+- `providers/ubuntu/docs/resources/package_lock.md`
+- `providers/ubuntu/docs/resources/reboot_barrier.md`
+- `providers/ubuntu/docs/resources/sshd_config.md`
+- `providers/ubuntu/docs/resources/swap.md`
+- `providers/ubuntu/docs/resources/symlink.md`
+- `providers/ubuntu/docs/resources/sysctl_entry.md`
+- `providers/ubuntu/docs/resources/systemd_unit.md`
+- `providers/ubuntu/docs/resources/timezone.md`
+- `providers/ubuntu/docs/resources/tls_identity.md`
+- `providers/ubuntu/docs/resources/trusted_cert.md`
+- `providers/ubuntu/docs/resources/ufw_rule.md`
+- `providers/ubuntu/docs/resources/user.md`
+- `providers/ubuntu/embeddata/README.md`
+- `providers/ubuntu/embeddata/manifest.json`
+- `providers/ubuntu/go.mod`
+- `providers/ubuntu/go.sum`
+- `providers/ubuntu/main.go`
+- `test/acceptance/fixtures/smoke/main.tf`
+
+_Generated at 2026-04-24T18:39:54Z._
