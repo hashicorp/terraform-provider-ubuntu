@@ -15,7 +15,7 @@ Manages a timezone resource via the executor.
 ```hcl
 resource "ubuntu_timezone" "example" {
   target = var.host
-  zone = "UTC"
+  zone = "example"
 }
 ```
 ## Argument Reference

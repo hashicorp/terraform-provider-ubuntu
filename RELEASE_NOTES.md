@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `a9e039e` Fetch downstream sync branch before push
+- `c995f46` formatting
 
 ## Scoped Paths
 
@@ -280,4 +280,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `providers/ubuntu/main.go`
 - `test/acceptance/fixtures/smoke/main.tf`
 
-_Generated at 2026-04-24T20:05:53Z._
+_Generated at 2026-05-06T19:50:52Z._
