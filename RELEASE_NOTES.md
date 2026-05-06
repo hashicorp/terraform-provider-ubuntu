@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `c995f46` formatting
+- `0fb41bc` Fix downstream PR reuse lookup
 
 ## Scoped Paths
 
@@ -280,4 +280,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `providers/ubuntu/main.go`
 - `test/acceptance/fixtures/smoke/main.tf`
 
-_Generated at 2026-05-06T19:50:52Z._
+_Generated at 2026-05-06T22:09:23Z._
