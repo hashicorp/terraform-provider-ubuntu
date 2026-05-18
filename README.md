@@ -1,6 +1,6 @@
 # Terraform Provider: Ubuntu
 
-This repository is a generated, buildable release repo for the ubuntu provider. The code-bearing source of truth lives in [https://github.com/jeremymefford/terraform-provider-linux](https://github.com/jeremymefford/terraform-provider-linux).
+This repository is a generated, buildable release repo for the ubuntu provider. 
 
 Issues, pull requests, behavior changes, docs generation changes, and release logic changes all belong upstream.
 
