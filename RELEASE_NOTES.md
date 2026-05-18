@@ -1,0 +1,230 @@
+# ubuntu v0.1.82
+
+Generated automatically from the provider manifest and scoped git history.
+
+## Release Summary
+
+- Provider address: `registry.terraform.io/hashicorp/ubuntu`
+- Lifecycle: `beta`
+- Support policy: `ubuntu-beta`
+- Release tag: `ubuntu/v0.1.82`
+- Previous tag: none discovered
+- Local smoke lane: `acceptance:smoke`
+- Support-matrix fixture: `smoke`
+- Release platforms: `linux/amd64`, `linux/arm64`, `darwin/amd64`, `darwin/arm64`, `windows/amd64`, `windows/arm64`
+
+## Public Surface Snapshot
+
+- Resources: `reboot_barrier`, `ubuntu_apt_repository`, `ubuntu_command`, `ubuntu_crontab_entry`, `ubuntu_file`, `ubuntu_fstab_entry`, `ubuntu_group`, `ubuntu_hosts_entry`, `ubuntu_kernel_modules`, `ubuntu_network_stack`, `ubuntu_package`, `ubuntu_package_lock`, `ubuntu_sshd_config`, `ubuntu_swap`, `ubuntu_symlink`, `ubuntu_sysctl_entry`, `ubuntu_systemd_unit`, `ubuntu_timezone`, `ubuntu_tls_identity`, `ubuntu_trusted_cert`, `ubuntu_ufw_rule`, `ubuntu_user`
+- Data sources: `ubuntu_file_info`, `ubuntu_mounts`, `ubuntu_network_interfaces`, `ubuntu_os_release`, `ubuntu_system_info`, `ubuntu_systemd_unit_info`
+- Actions: `restart_host`, `ubuntu_restart_process`, `ubuntu_run_command`
+
+## Scoped Commits
+
+- `864cd19` CI fix
+
+## Scoped Paths
+
+- `executor/capabilities/api.go`
+- `executor/capabilities/api_discovery_additional_test.go`
+- `executor/capabilities/cmdexec.go`
+- `executor/capabilities/cmdexec_test.go`
+- `executor/capabilities/discovery.go`
+- `executor/capabilities/discovery_linux.go`
+- `executor/capabilities/discovery_other.go`
+- `executor/capabilities/execution.go`
+- `executor/capabilities/fetch.go`
+- `executor/capabilities/fetch_test.go`
+- `executor/capabilities/fileops.go`
+- `executor/capabilities/fileops_test.go`
+- `executor/capabilities/fileops_wasm.go`
+- `executor/capabilities/identity.go`
+- `executor/capabilities/identity_test.go`
+- `executor/capabilities/types.go`
+- `executor/daemon/main.go`
+- `executor/logging/logging.go`
+- `executor/logging/logging_test.go`
+- `executor/runtime/dispatch.go`
+- `executor/runtime/dispatch_additional_test.go`
+- `executor/runtime/dispatch_test.go`
+- `executor/runtime/embedded_manifest.go`
+- `executor/runtime/embedded_manifest_test.go`
+- `executor/runtime/journal_key.go`
+- `executor/runtime/journal_test.go`
+- `executor/runtime/operation_journal.go`
+- `executor/runtime/process_exists_other.go`
+- `executor/runtime/process_exists_unix.go`
+- `executor/runtime/reboot_journal.go`
+- `executor/runtime/restart_journal.go`
+- `executor/runtime/restart_journal_stub.go`
+- `executor/runtime/shared_journal_lock_other.go`
+- `executor/runtime/shared_journal_lock_unix.go`
+- `executor/runtime/wasm.go`
+- `executor/runtime/wasm_integration_test.go`
+- `executor/runtime/wasm_test.go`
+- `guest/packs/debian/apt_repository/main.go`
+- `guest/packs/debian/apt_repository/main_test.go`
+- `guest/packs/debian/trusted_cert/main.go`
+- `guest/packs/debian/trusted_cert/main_test.go`
+- `guest/packs/linux/commands/main.go`
+- `guest/packs/linux/commands/main_test.go`
+- `guest/packs/linux/facts/main.go`
+- `guest/packs/linux/facts/main_test.go`
+- `guest/packs/linux/files_config/crontab.go`
+- `guest/packs/linux/files_config/crontab_test.go`
+- `guest/packs/linux/files_config/main.go`
+- `guest/packs/linux/files_config/main_test.go`
+- `guest/packs/linux/files_config/wrapper_resources_test.go`
+- `guest/packs/linux/identity/main.go`
+- `guest/packs/linux/identity/main_test.go`
+- `guest/packs/linux/kubeadm/main.go`
+- `guest/packs/linux/packages/main.go`
+- `guest/packs/linux/packages/main_test.go`
+- `guest/packs/linux/tls_identity/main.go`
+- `guest/packs/linux/tls_identity/main_test.go`
+- `guest/packs/systemd/services/main.go`
+- `guest/packs/systemd/services/main_test.go`
+- `guest/packs/ubuntu/ufw/main.go`
+- `guest/packs/ubuntu/ufw/main_test.go`
+- `guest/sdk/aptkeyring/aptkeyring.go`
+- `guest/sdk/aptkeyring/aptkeyring_test.go`
+- `guest/sdk/command_helpers.go`
+- `guest/sdk/contracts/debianapt/schema.go`
+- `guest/sdk/contracts/debianapt/schema_test.go`
+- `guest/sdk/contracts/linuxcommands/schema.go`
+- `guest/sdk/contracts/linuxcommands/schema_test.go`
+- `guest/sdk/contracts/linuxfacts/schema.go`
+- `guest/sdk/contracts/linuxfacts/schema_test.go`
+- `guest/sdk/contracts/linuxfiles/schema.go`
+- `guest/sdk/contracts/linuxfiles/schema_test.go`
+- `guest/sdk/contracts/linuxidentity/schema.go`
+- `guest/sdk/contracts/linuxidentity/schema_test.go`
+- `guest/sdk/contracts/linuxnetwork/schema.go`
+- `guest/sdk/contracts/linuxnetwork/schema_test.go`
+- `guest/sdk/contracts/linuxpackages/schema.go`
+- `guest/sdk/contracts/linuxpackages/schema_test.go`
+- `guest/sdk/contracts/linuxtls/schema.go`
+- `guest/sdk/contracts/linuxtls/schema_test.go`
+- `guest/sdk/contracts/redhatdnf/schema.go`
+- `guest/sdk/contracts/redhatdnf/schema_test.go`
+- `guest/sdk/contracts/redhatfirewalld/schema.go`
+- `guest/sdk/contracts/redhatfirewalld/schema_test.go`
+- `guest/sdk/contracts/systemd/schema.go`
+- `guest/sdk/contracts/systemd/schema_test.go`
+- `guest/sdk/contracts/trustedcert/schema.go`
+- `guest/sdk/contracts/trustedcert/schema_test.go`
+- `guest/sdk/contracts/ubuntuufw/schema.go`
+- `guest/sdk/contracts/ubuntuufw/schema_test.go`
+- `guest/sdk/crontab/crontab.go`
+- `guest/sdk/crontab/crontab_test.go`
+- `guest/sdk/digest/digest.go`
+- `guest/sdk/digest/digest_test.go`
+- `guest/sdk/helpers_test.go`
+- `guest/sdk/hostfs/hostfs.go`
+- `guest/sdk/hostfs/hostfs_test.go`
+- `guest/sdk/hostprofile.go`
+- `guest/sdk/hostsfile/hostsfile.go`
+- `guest/sdk/hostsfile/hostsfile_test.go`
+- `guest/sdk/sdk.go`
+- `guest/sdk/sdk_dispatch_test.go`
+- `guest/sdk/sdk_test.go`
+- `guest/sdk/ssh_bindings.go`
+- `guest/sdk/truststore/truststore.go`
+- `guest/sdk/truststore/truststore_test.go`
+- `guest/sdk/types.go`
+- `guest/sdk/types_test.go`
+- `guest/sdk/wasm_exports.go`
+- `guest/sdk/wasm_exports_tinygo.go`
+- `providers/shared/catalog/debian_apt.go`
+- `providers/shared/catalog/debian_trust.go`
+- `providers/shared/catalog/import_identity.go`
+- `providers/shared/catalog/import_identity_test.go`
+- `providers/shared/catalog/linux_commands.go`
+- `providers/shared/catalog/linux_facts.go`
+- `providers/shared/catalog/linux_files.go`
+- `providers/shared/catalog/linux_identity.go`
+- `providers/shared/catalog/linux_lifecycle.go`
+- `providers/shared/catalog/linux_network.go`
+- `providers/shared/catalog/linux_packages.go`
+- `providers/shared/catalog/linux_tls.go`
+- `providers/shared/catalog/locks.go`
+- `providers/shared/catalog/locks_test.go`
+- `providers/shared/catalog/modules.go`
+- `providers/shared/catalog/provider.go`
+- `providers/shared/catalog/provider_manifest.go`
+- `providers/shared/catalog/resource_policies.go`
+- `providers/shared/catalog/resource_policies_test.go`
+- `providers/shared/catalog/systemd.go`
+- `providers/shared/catalog/ubuntu.go`
+- `providers/shared/catalog/ubuntu_ufw.go`
+- `providers/shared/distro/detect.go`
+- `providers/shared/distro/detect_test.go`
+- `providers/shared/distro/families.go`
+- `providers/shared/engine/adapter_helpers.go`
+- `providers/shared/engine/adapter_helpers_test.go`
+- `providers/shared/engine/destroy_safety.go`
+- `providers/shared/engine/destroy_safety_test.go`
+- `providers/shared/engine/entry_action.go`
+- `providers/shared/engine/entry_action_datasource_test.go`
+- `providers/shared/engine/entry_datasource.go`
+- `providers/shared/engine/entry_resource.go`
+- `providers/shared/engine/entry_resource_lifecycle_test.go`
+- `providers/shared/engine/entry_resource_test.go`
+- `providers/shared/engine/hashed_string.go`
+- `providers/shared/engine/hashed_string_test.go`
+- `providers/shared/engine/helper_darkpaths_test.go`
+- `providers/shared/engine/locks.go`
+- `providers/shared/engine/private_state_test.go`
+- `providers/shared/engine/reboot_barrier_resource.go`
+- `providers/shared/engine/resource_identity.go`
+- `providers/shared/engine/resource_identity_test.go`
+- `providers/shared/engine/state_helpers.go`
+- `providers/shared/engine/state_helpers_test.go`
+- `providers/shared/engine/types.go`
+- `providers/shared/hostsession/helpers_additional_test.go`
+- `providers/shared/hostsession/host_readiness.go`
+- `providers/shared/hostsession/host_readiness_additional_test.go`
+- `providers/shared/hostsession/ids.go`
+- `providers/shared/hostsession/locks.go`
+- `providers/shared/hostsession/manager.go`
+- `providers/shared/hostsession/manager_startup_test.go`
+- `providers/shared/hostsession/manager_test.go`
+- `providers/shared/hostsession/manager_wrappers_test.go`
+- `providers/shared/hostsession/operation_tracking.go`
+- `providers/shared/hostsession/process_exists_other.go`
+- `providers/shared/hostsession/process_exists_unix.go`
+- `providers/shared/hostsession/protocol.go`
+- `providers/shared/hostsession/reboot_platform.go`
+- `providers/shared/hostsession/reboot_platform_additional_test.go`
+- `providers/shared/hostsession/reboot_types.go`
+- `providers/shared/hostsession/restart_host.go`
+- `providers/shared/hostsession/restart_host_test.go`
+- `providers/shared/hostsession/session_runtime.go`
+- `providers/shared/hostsession/session_runtime_test.go`
+- `providers/shared/serving/base.go`
+- `providers/shared/serving/base_test.go`
+- `providers/shared/serving/runtime_assets.go`
+- `providers/shared/serving/runtime_assets_test.go`
+- `providers/shared/serving/version.go`
+- `providers/shared/serving/version_test.go`
+- `providers/shared/transport/local.go`
+- `providers/shared/transport/logging.go`
+- `providers/shared/transport/pool.go`
+- `providers/shared/transport/pool_test.go`
+- `providers/shared/transport/ssh.go`
+- `providers/shared/transport/ssh_test.go`
+- `providers/shared/transport/transport.go`
+- `test/acceptance/fixtures/smoke/main.tf`
+- `tools/providers/dev.go`
+- `tools/providers/dev_test.go`
+- `tools/providers/docs_server.go`
+- `tools/providers/docsgen/generate.go`
+- `tools/providers/docsgen/generate_test.go`
+- `tools/providers/docsgen/server.go`
+- `tools/providers/docsgen/server_test.go`
+- `tools/providers/run/main.go`
+- `tools/providers/run/main_test.go`
+- `tools/providers/scaffold.go`
+- `tools/providers/scaffold_test.go`
+
+_Generated at 2026-05-18T19:22:52Z._
