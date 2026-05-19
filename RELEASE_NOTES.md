@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `d540784` allowlisting certain files
+- `9f573c3` fixing removal of compliance required file
 
 ## Scoped Paths
 
@@ -227,4 +227,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-19T04:12:54Z._
+_Generated at 2026-05-19T12:52:18Z._
