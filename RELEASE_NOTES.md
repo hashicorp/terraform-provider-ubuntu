@@ -227,4 +227,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-19T12:52:18Z._
+_Generated at 2026-05-19T12:59:48Z._
