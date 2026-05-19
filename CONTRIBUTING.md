@@ -1,6 +1,6 @@
 # Contributing
 
-This repository is a generated downstream source repo for the ubuntu provider.
+This repository contains the ubuntu provider.
 
 Do not open code changes here. Open issues and pull requests in the upstream monorepo instead:
 
