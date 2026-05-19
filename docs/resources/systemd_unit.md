@@ -15,7 +15,9 @@ Manages a systemd_unit resource via the hostsession.
 ```hcl
 resource "ubuntu_systemd_unit" "example" {
   target = var.host
-  name = "example"
+  name = "nginx.service"
+  enabled = true
+  state = "active"
 }
 ```
 ## Argument Reference

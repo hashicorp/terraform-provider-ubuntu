@@ -15,9 +15,9 @@ Manages a fstab_entry resource via the hostsession.
 ```hcl
 resource "ubuntu_fstab_entry" "example" {
   target = var.host
-  device = "example"
-  fstype = "example"
-  mount = "example"
+  device = "/dev/disk/by-id/scsi-0DO_Volume_data"
+  fstype = "ext4"
+  mount = "/srv/data"
 }
 ```
 ## Argument Reference

@@ -16,10 +16,11 @@ Manages a crontab_entry resource via the hostsession.
 resource "ubuntu_crontab_entry" "example" {
   target = var.host
   command = <<-EOT
-    echo hello from Terraform
+    /usr/bin/apt-get autoremove -y
   EOT
-  name = "example"
+  name = "apt-cleanup"
   user = "root"
+  schedule = "15 3 * * *"
 }
 ```
 ## Argument Reference

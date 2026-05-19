@@ -15,7 +15,9 @@ Manages a tls_identity resource via the hostsession.
 ```hcl
 resource "ubuntu_tls_identity" "example" {
   target = var.host
-  name = "example"
+  name = "web"
+  fullchain_pem = file("${path.module}/fullchain.pem")
+  private_key_pem = file("${path.module}/private-key.pem")
 }
 ```
 ## Argument Reference
@@ -23,16 +25,16 @@ resource "ubuntu_tls_identity" "example" {
 The resource supports the following arguments:
 
 - `allow_destructive_destroy` (Optional, bool) - Explicitly allow destructive destroy for protected or side-effecting host objects managed by this resource.
-- `ca_chain_der_base64` (Optional, string) - Optional base64-encoded concatenated DER intermediate certificate chain used with certificate_der_base64.
-- `ca_chain_pem` (Optional, string) - Optional PEM-encoded intermediate certificate chain used with certificate_pem.
-- `certificate_der_base64` (Optional, string) - Base64-encoded DER leaf certificate. Use with optional ca_chain_der_base64 plus private_key_der_base64.
-- `certificate_pem` (Optional, string) - PEM-encoded leaf certificate. Use with optional ca_chain_pem plus private_key_pem.
-- `fullchain_der_base64` (Optional, string) - Base64-encoded DER certificate chain. Use with private_key_der_base64.
-- `fullchain_pem` (Optional, string) - PEM-encoded leaf certificate plus any intermediate CA certificates. Use with private_key_pem.
-- `name` (Required, string) - Logical TLS identity name used to derive the managed fullchain and key paths.
+- `ca_chain_der_base64` (Optional, string) - Optional base64-encoded concatenated DER intermediate certificate chain used with certificate_der_base64. The provider appends it after the leaf certificate when writing the managed fullchain PEM on disk.
+- `ca_chain_pem` (Optional, string) - Optional PEM-encoded intermediate certificate chain used with certificate_pem. The provider appends it after the leaf certificate when writing the managed fullchain PEM on disk.
+- `certificate_der_base64` (Optional, string) - Base64-encoded DER leaf certificate. The provider combines it with optional ca_chain_der_base64, normalizes the result, and writes the managed fullchain PEM on disk. Use with private_key_der_base64.
+- `certificate_pem` (Optional, string) - PEM-encoded leaf certificate. The provider combines it with optional ca_chain_pem, normalizes the result, and writes the managed fullchain PEM on disk. Use with private_key_pem.
+- `fullchain_der_base64` (Optional, string) - Base64-encoded DER certificate chain. The provider decodes and normalizes it before writing the managed fullchain PEM on disk. Use with private_key_der_base64.
+- `fullchain_pem` (Optional, string) - PEM-encoded leaf certificate plus any intermediate CA certificates. The provider normalizes the chain and writes the managed fullchain PEM on disk. Use with private_key_pem.
+- `name` (Required, string) - Logical TLS identity name used to derive the managed fullchain PEM and private key paths.
 - `port` (Optional, int64) - Target port for this resource. Overrides provider default_target.port.
-- `private_key_der_base64` (Optional, string) - Base64-encoded DER private key matching the leaf certificate in the DER input families.
-- `private_key_pem` (Optional, string) - PEM-encoded private key matching the leaf certificate in the PEM input families.
+- `private_key_der_base64` (Optional, string) - Base64-encoded DER private key matching the leaf certificate in the DER input families. The provider normalizes it to PKCS#8 PEM on disk.
+- `private_key_pem` (Optional, string) - PEM-encoded private key matching the leaf certificate in the PEM input families. The provider normalizes it to PKCS#8 PEM on disk.
 - `target` (Optional, string) - Target host or address for this resource. Overrides provider default_target.target.
 - `transport` (Optional, string) - Transport for this resource. The current provider surface supports ssh.
 
@@ -43,7 +45,7 @@ This resource exports the following attributes:
 - `fullchain_digest` (string) - Content digest of the managed fullchain PEM, including the algorithm tag.
 - `fullchain_path` (string) - Path of the managed fullchain PEM on the host.
 - `id` (string) - Unique identifier for this resource.
-- `input_family` (string) - Resolved input family used to build this TLS identity.
+- `input_family` (string) - Resolved input family used to build this TLS identity: pem_fullchain, pem_split, der_fullchain, or der_split.
 - `issuer` (string) - Issuer of the leaf certificate.
 - `not_after` (string) - Leaf certificate expiry timestamp in RFC3339 format.
 - `private_key_digest` (string) - Content digest of the managed private key PEM, including the algorithm tag.

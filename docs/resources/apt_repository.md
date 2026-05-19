@@ -15,7 +15,10 @@ Manages a apt_repository resource via the hostsession.
 ```hcl
 resource "ubuntu_apt_repository" "example" {
   target = var.host
-  uri = "example"
+  uri = "https://dl.yarnpkg.com/debian/"
+  suite = "stable"
+  components = ["main"]
+  update_cache = true
 }
 ```
 ## Argument Reference

@@ -15,7 +15,7 @@ Manages a group resource via the hostsession.
 ```hcl
 resource "ubuntu_group" "example" {
   target = var.host
-  name = "example"
+  name = "deploy"
 }
 ```
 ## Argument Reference

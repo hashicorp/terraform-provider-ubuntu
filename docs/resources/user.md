@@ -15,7 +15,8 @@ Manages a user resource via the hostsession.
 ```hcl
 resource "ubuntu_user" "example" {
   target = var.host
-  name = "example"
+  name = "deploy"
+  shell = "/bin/bash"
 }
 ```
 ## Argument Reference

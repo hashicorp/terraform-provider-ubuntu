@@ -15,7 +15,7 @@ Manages a file resource via the hostsession.
 ```hcl
 resource "ubuntu_file" "example" {
   target = var.host
-  path = "/etc/example.conf"
+  path = "/etc/terraform-provider-linux/managed.conf"
 }
 ```
 ## Argument Reference

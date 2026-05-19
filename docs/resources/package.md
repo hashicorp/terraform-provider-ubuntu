@@ -15,7 +15,8 @@ Manages a package resource via the hostsession.
 ```hcl
 resource "ubuntu_package" "example" {
   target = var.host
-  name = "example"
+  name = "jq"
+  update_cache = true
 }
 ```
 ## Argument Reference

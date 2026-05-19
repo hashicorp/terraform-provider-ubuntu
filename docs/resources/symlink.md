@@ -15,8 +15,8 @@ Manages a symlink resource via the hostsession.
 ```hcl
 resource "ubuntu_symlink" "example" {
   target_host = var.host
-  path = "/etc/example.conf"
-  target = "/srv/example"
+  path = "/usr/local/bin/kubectl"
+  target = "/opt/bin/kubectl"
 }
 ```
 ## Argument Reference

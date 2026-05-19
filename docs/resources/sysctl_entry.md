@@ -15,8 +15,8 @@ Manages a sysctl_entry resource via the hostsession.
 ```hcl
 resource "ubuntu_sysctl_entry" "example" {
   target = var.host
-  key = "example"
-  value = "example"
+  key = "net.ipv4.ip_forward"
+  value = "1"
 }
 ```
 ## Argument Reference
