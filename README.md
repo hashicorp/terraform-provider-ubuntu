@@ -30,9 +30,13 @@ Repeated applies converge the machine back toward the state declared in code, wh
 4. Run `terraform plan` and `terraform apply` to reconcile the host.
 
 ## Architecture and Design
-The ubuntu provider is built on top of the Terraform Plugin Framework and uses the Go SSH library to connect to the target host. It executes commands and manages files over SSH to enforce the desired state declared in Terraform configurations. 
+The ubuntu provider is built on top of the Terraform Plugin Framework and uses SSH to connect to the target host(s). It executes commands and manages files to enforce the desired state declared in Terraform configurations. 
 
+It pushes a small, machine-compiled binary to the target host on demand, which then runs on host perform the necessary operations. The executor is removed as soon as the operations are complete. No host tools or agents are required beyond SSH.
 
+The provider can manage many host connections in parallel, and it is designed to be resilient to transient SSH failures and host reboots.
+
+It provides facilities to be fully post-quantum safe, even if the underlying SSH connection is not. See provider configuration for details.
 
 ## Simple Examples
 
