@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `1396097` readme updates
+- `d540784` allowlisting certain files
 
 ## Scoped Paths
 
@@ -227,4 +227,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-19T03:39:30Z._
+_Generated at 2026-05-19T04:12:54Z._

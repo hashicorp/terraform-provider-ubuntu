@@ -2,7 +2,8 @@
 
 This repository contains the ubuntu provider.
 
-**Status:** This provider is in alpha and is not officially supported.
+> [!WARNING]
+> This provider is in alpha and is not officially supported.
 
 Issues, pull requests, behavior changes, docs generation changes, and release logic changes all belong upstream.
 
@@ -32,11 +33,11 @@ Repeated applies converge the machine back toward the state declared in code, wh
 ## Architecture and Design
 The ubuntu provider is built on top of the Terraform Plugin Framework and uses SSH to connect to the target host(s). It executes commands and manages files to enforce the desired state declared in Terraform configurations. 
 
-It pushes a small, machine-compiled binary to the target host on demand, which then runs on host perform the necessary operations. The executor is removed as soon as the operations are complete. No host tools or agents are required beyond SSH.
+It pushes a small, machine-compiled binary to the target host, which then executes operations necessary to enforce the desired state. The executor is removed as soon as the operations are complete. No host tools or agents are required beyond SSH.
 
 The provider can manage many host connections in parallel, and it is designed to be resilient to transient SSH failures and host reboots.
 
-It provides facilities to be fully post-quantum safe, even if the underlying SSH connection is not. See provider configuration for details.
+It provides post-quantum safety capabilities, even if the underlying SSH connection cannot. See provider configuration for details.
 
 ## Simple Examples
 
@@ -54,9 +55,8 @@ terraform {
 
 provider "ubuntu" {
 	ssh {
-		user             = "terraform"
-		private_key      = var.ssh_private_key_pem
-		known_hosts_file = var.ssh_known_hosts_path
+		user        = "terraform"
+		private_key = var.ssh_private_key_pem
 	}
 
 	default_target {
@@ -71,30 +71,24 @@ resource "ubuntu_package" "nginx" {
 }
 ```
 
-If you use Vault's SSH secrets engine, the best current pattern is to let Vault issue a short-lived keypair and signed certificate at runtime, then pass both into the provider as ephemeral values so they stay out of Terraform state and plan files. The target host still trusts the signer through `TrustedUserCAKeys`, and SSH certificate auth still uses a private key, but Vault can issue that keypair just for the run instead of requiring you to store a long-lived PEM in Terraform variables or KV.
+If you use Vault's SSH secrets engine, let Vault issue a short-lived keypair and signed certificate at runtime, then pass both into the provider as ephemeral values so they stay out of Terraform state and plan files.
 
 ```hcl
 provider "vault" {}
 
 ephemeral "vault_generic_endpoint" "runner_ssh" {
 	path      = "ssh-client-signer/issue/terraform"
-	data_json = jsonencode({
-		valid_principals = "terraform"
-	})
 	write_fields = ["private_key", "signed_key"]
 }
 
 provider "ubuntu" {
 	ssh {
-		user             = "terraform"
-		private_key      = ephemeral.vault_generic_endpoint.runner_ssh.write_data["private_key"]
-		certificate      = ephemeral.vault_generic_endpoint.runner_ssh.write_data["signed_key"]
-		known_hosts_file = var.ssh_known_hosts_path
+		user        = "terraform"
+		private_key = ephemeral.vault_generic_endpoint.runner_ssh.write_data["private_key"]
+		certificate = ephemeral.vault_generic_endpoint.runner_ssh.write_data["signed_key"]
 	}
 }
 ```
-
-In HCP Terraform, that usually means authenticating the Vault provider with workspace variables or an `auth_login` block, letting Vault issue the SSH material just in time, and giving the Linux provider the returned `private_key` and `signed_key` as ephemeral values. That keeps the SSH credential out of Terraform state while still using the standard OpenSSH signed-certificate flow.
 
 ### Example 2: Configure nginx as a routing service
 
