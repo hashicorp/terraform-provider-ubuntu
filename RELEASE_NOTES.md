@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `1bceeb4` provider doc generation and a small bug fix around TLS certificate handling for SSH
+- `dd38099` updating readme with vault ephemeral resources
 
 ## Scoped Paths
 
@@ -227,4 +227,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-19T01:07:41Z._
+_Generated at 2026-05-19T02:34:15Z._
