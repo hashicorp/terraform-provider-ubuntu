@@ -15,7 +15,7 @@ Reads file_info data via the hostsession.
 ```hcl
 data "ubuntu_file_info" "example" {
   target = var.host
-  path = "/etc/example.conf"
+  path = "/etc/terraform-provider-linux/managed.conf"
 }
 ```
 ## Argument Reference

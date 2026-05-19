@@ -327,7 +327,7 @@ func providerBlueprints() []ProviderBlueprint {
 	return []ProviderBlueprint{
 		{
 			Name:      "linux",
-			Address:   "registry.terraform.io/jeremymefford/linux",
+			Address:   "registry.terraform.io/hashicorp/linux",
 			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:             ProviderLifecycleInternal,
@@ -339,7 +339,7 @@ func providerBlueprints() []ProviderBlueprint {
 		},
 		{
 			Name:      "debian",
-			Address:   "registry.terraform.io/jeremymefford/debian",
+			Address:   "registry.terraform.io/hashicorp/debian",
 			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "debian_apt", "debian_trust"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:     ProviderLifecycleDirect,
@@ -350,7 +350,7 @@ func providerBlueprints() []ProviderBlueprint {
 		},
 		{
 			Name:      "rocky",
-			Address:   "registry.terraform.io/jeremymefford/rocky",
+			Address:   "registry.terraform.io/hashicorp/rocky",
 			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "redhat_dnf", "redhat_firewalld", "redhat_trust", "rocky_delta"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:             ProviderLifecycleBeta,
@@ -363,7 +363,7 @@ func providerBlueprints() []ProviderBlueprint {
 		},
 		{
 			Name:      "rhel",
-			Address:   "registry.terraform.io/jeremymefford/rhel",
+			Address:   "registry.terraform.io/hashicorp/rhel",
 			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "redhat_dnf", "redhat_firewalld", "redhat_trust", "rhel_delta"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:            ProviderLifecycleBeta,

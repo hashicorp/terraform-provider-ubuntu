@@ -15,7 +15,7 @@ Manages a timezone resource via the hostsession.
 ```hcl
 resource "ubuntu_timezone" "example" {
   target = var.host
-  zone = "example"
+  zone = "UTC"
 }
 ```
 ## Argument Reference

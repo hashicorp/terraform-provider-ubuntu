@@ -15,8 +15,8 @@ Manages a hosts_entry resource via the hostsession.
 ```hcl
 resource "ubuntu_hosts_entry" "example" {
   target = var.host
-  hostname = "example"
-  ip = "example"
+  hostname = "internal-api.local"
+  ip = "10.0.2.15"
 }
 ```
 ## Argument Reference

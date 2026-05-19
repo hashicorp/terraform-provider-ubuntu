@@ -15,8 +15,8 @@ Manages a kernel_modules resource via the hostsession.
 ```hcl
 resource "ubuntu_kernel_modules" "example" {
   target = var.host
-  modules = ["example"]
-  path = "/etc/example.conf"
+  modules = ["overlay", "br_netfilter"]
+  path = "/etc/modules-load.d/container-runtime.conf"
 }
 ```
 ## Argument Reference

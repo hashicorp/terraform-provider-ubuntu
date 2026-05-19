@@ -16,9 +16,10 @@ Manages a command resource via the hostsession.
 resource "ubuntu_command" "example" {
   target = var.host
   command = <<-EOT
-    echo hello from Terraform
+    echo managed by Terraform >/etc/terraform-provider-linux-smoke.conf
   EOT
-  name = "example"
+  name = "write-smoke-file"
+  creates = "/etc/terraform-provider-linux-smoke.conf"
 }
 ```
 ## Argument Reference

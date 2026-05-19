@@ -15,7 +15,7 @@ Manages a ufw_rule resource via the hostsession.
 ```hcl
 resource "ubuntu_ufw_rule" "example" {
   target = var.host
-  name = "example"
+  name = "allow-https"
   port = "443"
 }
 ```

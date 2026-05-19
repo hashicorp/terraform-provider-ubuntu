@@ -15,7 +15,7 @@ Manages a package_lock resource via the hostsession.
 ```hcl
 resource "ubuntu_package_lock" "example" {
   target = var.host
-  packages = ["example"]
+  packages = ["containerd"]
 }
 ```
 ## Argument Reference

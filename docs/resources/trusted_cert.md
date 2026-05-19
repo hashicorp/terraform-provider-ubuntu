@@ -16,7 +16,7 @@ Manages a trusted_cert resource via the hostsession.
 resource "ubuntu_trusted_cert" "example" {
   target = var.host
   certificate = file("${path.module}/ca.pem")
-  name = "example"
+  name = "corp-root-ca"
 }
 ```
 ## Argument Reference
@@ -24,8 +24,8 @@ resource "ubuntu_trusted_cert" "example" {
 The resource supports the following arguments:
 
 - `allow_destructive_destroy` (Optional, bool) - Explicitly allow destructive destroy for protected or side-effecting host objects managed by this resource.
-- `certificate` (Required, string) - PEM-encoded CA certificate to trust on the host.
-- `name` (Required, string) - Logical certificate name used for the trust-anchor file.
+- `certificate` (Required, string) - CA certificate to trust on the host. Supply exactly one PEM CERTIFICATE block; the provider normalizes it before writing the trust-anchor file.
+- `name` (Required, string) - Logical certificate name used to derive the managed trust-anchor file.
 - `port` (Optional, int64) - Target port for this resource. Overrides provider default_target.port.
 - `target` (Optional, string) - Target host or address for this resource. Overrides provider default_target.target.
 - `transport` (Optional, string) - Transport for this resource. The current provider surface supports ssh.
@@ -34,8 +34,8 @@ The resource supports the following arguments:
 
 This resource exports the following attributes:
 
-- `cert_path` (string) - Path of the managed trust-anchor file.
-- `digest` (string) - Content digest of the managed certificate PEM, including the algorithm tag.
+- `cert_path` (string) - Path of the managed trust-anchor PEM file.
+- `digest` (string) - Content digest of the managed normalized certificate PEM, including the algorithm tag.
 - `id` (string) - Unique identifier for this resource.
 - `issuer` (string) - Parsed certificate issuer.
 - `subject` (string) - Parsed certificate subject.

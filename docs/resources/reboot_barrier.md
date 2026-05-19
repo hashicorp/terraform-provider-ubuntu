@@ -15,7 +15,7 @@ Acts as a Terraform DAG barrier that safely reboots a host and resumes after it 
 ```hcl
 resource "ubuntu_reboot_barrier" "example" {
   target = var.host
-  reason = "example"
+  reason = "kernel-updates"
   triggers = { example = "value" }
 }
 ```
