@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `e544b77` removing excess code
+- `beece14` CI fix
 
 ## Scoped Paths
 
@@ -231,4 +231,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-21T21:08:38Z._
+_Generated at 2026-05-21T21:42:30Z._
