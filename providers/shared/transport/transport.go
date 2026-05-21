@@ -22,6 +22,10 @@ type Transport interface {
 	// Connect establishes a connection to the target host.
 	Connect(ctx context.Context) error
 
+	// HostKeyFingerprint returns the remote host key fingerprint accepted during
+	// connection establishment, when the transport verifies a host key.
+	HostKeyFingerprint() string
+
 	// PushFile sends a file from local bytes to a remote path with the given mode.
 	PushFile(ctx context.Context, remotePath string, data []byte, mode os.FileMode) error
 
@@ -42,11 +46,13 @@ type Transport interface {
 // connection to a target host.
 type TransportConfig struct {
 	// SSH config (from provider-level ssh block)
-	SSHUser           string // remote username
-	SSHPrivateKey     string // PEM-encoded private key
-	SSHCertificate    string // PEM-encoded signed certificate
-	SSHAgent          bool   // use SSH agent for authentication
-	SSHKnownHostsFile string // path to known_hosts file used for host key verification
+	SSHUser               string // remote username
+	SSHPrivateKey         string // PEM-encoded private key
+	SSHCertificate        string // PEM-encoded signed certificate
+	SSHAgent              bool   // use SSH agent for authentication
+	SSHKnownHostsFile     string // path to known_hosts data loaded into provider memory
+	SSHHostKeyTrust       *HostKeyTrustStore
+	SSHHostKeyFingerprint string // expected pinned host key fingerprint for this target
 
 	// Target-level config (from provider default_target or resource target attrs)
 	Target    string

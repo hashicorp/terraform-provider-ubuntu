@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"context"
 	"crypto/rand"
-	"crypto/sha256"
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -22,7 +20,7 @@ import (
 
 const (
 	// defaultExecutorBasePath is the default directory on the target where the
-	// executor binary is cached, keyed by the hash of the binary.
+	// executor binary is cached, keyed by the digest of the binary.
 	defaultExecutorBasePath         = "/tmp/tf-unix"
 	executorBinName                 = "executor"
 	executorCacheKeyLength          = 12
@@ -224,26 +222,24 @@ func (m *ExecutorManager) pluginVerificationOptions() (bool, bool) {
 	return m.usePostQuantum, m.dualVerification
 }
 
-// executorHash returns the SHA-256 used to verify the cached executor binary on
-// the host before the executor itself is running.
-func (m *ExecutorManager) executorHash(arch string) (string, error) {
+// executorDigest returns the BLAKE3 digest used to key and verify the cached executor binary.
+func (m *ExecutorManager) executorDigest(arch string) (string, error) {
 	asset, err := m.assets.ExecutorBinary(arch)
 	if err != nil {
 		return "", err
 	}
-	sum := sha256.Sum256(asset.Bytes)
-	return hex.EncodeToString(sum[:]), nil
+	return assets.DigestBytes(asset.Bytes), nil
 }
 
-// executorDir returns the cache directory path on the target for a given hash.
-func (m *ExecutorManager) executorDir(hash string) string {
+// executorDir returns the cache directory path on the target for a given digest.
+func (m *ExecutorManager) executorDir(digest string) string {
 	layout := m.getExecutorLayout()
-	return fmt.Sprintf("%s-%s", layout.BasePath, executorCacheKey(hash))
+	return fmt.Sprintf("%s-%s", layout.BasePath, executorCacheKey(digest))
 }
 
 // executorPath returns the full path to the executor binary on the target.
-func (m *ExecutorManager) executorPath(hash string) string {
-	return fmt.Sprintf("%s/%s", m.executorDir(hash), executorBinName)
+func (m *ExecutorManager) executorPath(digest string) string {
+	return fmt.Sprintf("%s/%s", m.executorDir(digest), executorBinName)
 }
 
 func executorCacheKey(digest string) string {
@@ -326,15 +322,15 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 			return err
 		}
 
-		hash, err := m.executorHash(arch)
+		digest, err := m.executorDigest(arch)
 		if err != nil {
 			ensureErr = err
 			return err
 		}
 
-		binPath := m.executorPath(hash)
+		binPath := m.executorPath(digest)
 
-		if !m.isExecutorCached(ctx, session, binPath, hash) {
+		if !m.isExecutorCached(ctx, session, binPath, digest) {
 			if err := session.Transport.PushFile(ctx, binPath, asset.Bytes, 0755); err != nil {
 				ensureErr = fmt.Errorf("push executor binary: %w", err)
 				return ensureErr
@@ -375,10 +371,14 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 }
 
 // isExecutorCached checks whether the executor binary at the given path on the
-// target matches the expected hash.
-func (m *ExecutorManager) isExecutorCached(ctx context.Context, session *transport.Session, binPath, expectedHash string) bool {
-	// Run sha256sum on the target and compare output.
-	checkCmd := fmt.Sprintf("sha256sum %s 2>/dev/null", binPath)
+// target matches the expected BLAKE3 digest when b3sum is available.
+func (m *ExecutorManager) isExecutorCached(ctx context.Context, session *transport.Session, binPath, expectedDigest string) bool {
+	_, expectedEncodedDigest, ok := strings.Cut(strings.TrimSpace(expectedDigest), ":")
+	if !ok || expectedEncodedDigest == "" {
+		return false
+	}
+
+	checkCmd := fmt.Sprintf("if command -v b3sum >/dev/null 2>&1; then b3sum %s 2>/dev/null; fi", shellQuote(binPath))
 	stdin, stdout, err := session.Transport.StartProcess(ctx, checkCmd)
 	if err != nil {
 		return false
@@ -388,9 +388,8 @@ func (m *ExecutorManager) isExecutorCached(ctx context.Context, session *transpo
 	scanner := bufio.NewScanner(stdout)
 	if scanner.Scan() {
 		line := scanner.Text()
-		// sha256sum output format: "<hash>  <path>"
 		parts := strings.Fields(line)
-		if len(parts) >= 1 && parts[0] == expectedHash {
+		if len(parts) >= 1 && parts[0] == expectedEncodedDigest {
 			stdout.Close()
 			return true
 		}

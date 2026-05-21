@@ -21,7 +21,7 @@ func TestDesiredUFWRuleSpecDefaults(t *testing.T) {
 	if spec.Action != "allow" || spec.Direction != "in" || spec.Protocol != "tcp" {
 		t.Fatalf("unexpected defaults: %#v", spec)
 	}
-	if spec.RuleComment != "tf-nix:name=ssh" {
+	if spec.RuleComment != "tf-linux-provider:name=ssh" {
 		t.Fatalf("unexpected managed comment %q", spec.RuleComment)
 	}
 }
@@ -31,14 +31,14 @@ func TestParseUFWStatusNumbered(t *testing.T) {
 
 	rules := parseUFWStatusNumbered(`Status: active
 
-[ 1] 22/tcp                     ALLOW IN    Anywhere                   # tf-nix:name=ssh
+[ 1] 22/tcp                     ALLOW IN    Anywhere                   # tf-linux-provider:name=ssh
 [ 2] 6443/tcp                   ALLOW IN    10.0.0.0/8                 # some other rule
-[ 3] 53/udp                     DENY OUT    Anywhere                   # tf-nix:name=dns-egress
+[ 3] 53/udp                     DENY OUT    Anywhere                   # tf-linux-provider:name=dns-egress
 `)
 	if len(rules) != 2 {
 		t.Fatalf("expected 2 managed rules, got %#v", rules)
 	}
-	if rules[0].Number != 1 || rules[1].Comment != "tf-nix:name=dns-egress" {
+	if rules[0].Number != 1 || rules[1].Comment != "tf-linux-provider:name=dns-egress" {
 		t.Fatalf("unexpected parsed rules: %#v", rules)
 	}
 }
@@ -61,7 +61,7 @@ func TestApplyUFWRuleRunsDeleteThenAdd(t *testing.T) {
 			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "Status: active\nDefault: deny (incoming), allow (outgoing), disabled (routed)\n"}, nil
 		}
 		if len(args) >= 2 && args[0] == "status" && args[1] == "numbered" {
-			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "[ 3] 22/tcp ALLOW IN Anywhere # tf-nix:name=ssh\n"}, nil
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "[ 3] 22/tcp ALLOW IN Anywhere # tf-linux-provider:name=ssh\n"}, nil
 		}
 		return &pluginsdk.CmdResult{ExitCode: 0}, nil
 	}
@@ -79,7 +79,7 @@ func TestApplyUFWRuleRunsDeleteThenAdd(t *testing.T) {
 		"ufw status numbered",
 		"ufw status numbered",
 		"ufw --force delete 3",
-		"ufw allow in from any to any port 22 proto tcp comment tf-nix:name=ssh",
+		"ufw allow in from any to any port 22 proto tcp comment tf-linux-provider:name=ssh",
 	}
 	if !reflect.DeepEqual(commands, want) {
 		t.Fatalf("unexpected commands:\nwant %#v\n got %#v", want, commands)
@@ -102,7 +102,7 @@ func TestApplyUFWRuleBlocksSSHDisconnectWithoutOverride(t *testing.T) {
 		case len(args) >= 2 && args[0] == "status" && args[1] == "verbose":
 			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "Status: active\nDefault: deny (incoming), allow (outgoing), disabled (routed)\n"}, nil
 		case len(args) >= 2 && args[0] == "status" && args[1] == "numbered":
-			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "[ 1] 22/tcp ALLOW IN Anywhere # tf-nix:name=ssh\n"}, nil
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "[ 1] 22/tcp ALLOW IN Anywhere # tf-linux-provider:name=ssh\n"}, nil
 		default:
 			return &pluginsdk.CmdResult{ExitCode: 0}, nil
 		}
@@ -138,7 +138,7 @@ func TestApplyUFWRuleAllowsOverride(t *testing.T) {
 		case len(args) >= 2 && args[0] == "status" && args[1] == "verbose":
 			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "Status: active\nDefault: deny (incoming), allow (outgoing), disabled (routed)\n"}, nil
 		case len(args) >= 2 && args[0] == "status" && args[1] == "numbered":
-			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "[ 1] 22/tcp ALLOW IN Anywhere # tf-nix:name=ssh\n"}, nil
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "[ 1] 22/tcp ALLOW IN Anywhere # tf-linux-provider:name=ssh\n"}, nil
 		default:
 			return &pluginsdk.CmdResult{ExitCode: 0}, nil
 		}

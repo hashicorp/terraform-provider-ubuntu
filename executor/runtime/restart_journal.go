@@ -131,7 +131,7 @@ func resolveRestartCommand(ctx context.Context, d *Dispatcher, moduleName string
 
 	input := json.RawMessage(config)
 	if usesModuleDispatch(moduleName, "restart_process") {
-		input = marshalModulePayload("restart_process", "invoke", nil, nil, input, "")
+		input = d.marshalModulePayload("restart_process", "invoke", nil, nil, input, "")
 	}
 
 	result, err := d.rt.CallInvoke(ctx, moduleName, input)

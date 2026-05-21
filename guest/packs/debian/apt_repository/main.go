@@ -499,7 +499,7 @@ func sanitizeRepoToken(value string) string {
 }
 
 func renderRepositoryFile(spec *aptRepositorySpec) string {
-	return fmt.Sprintf("# Managed by tf-nix\n%s\n", spec.SourceLine)
+	return fmt.Sprintf("# Managed by tf-linux-provider\n%s\n", spec.SourceLine)
 }
 
 func renderSourceLine(spec *aptRepositorySpec) (string, error) {

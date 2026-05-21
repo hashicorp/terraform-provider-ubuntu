@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -149,7 +150,7 @@ func (d *Dispatcher) ReadResource(ctx context.Context, params hostrpc.ResourceRe
 
 	input := params.State
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "read", nil, params.State, nil, "")
+		input = d.marshalModulePayload(params.ResourceType, "read", nil, params.State, nil, "")
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "read", input)
@@ -176,7 +177,7 @@ func (d *Dispatcher) ValidateResource(ctx context.Context, params hostrpc.Resour
 
 	input := params.Config
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "validate", nil, nil, params.Config, "")
+		input = d.marshalModulePayload(params.ResourceType, "validate", nil, nil, params.Config, "")
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "validate", input)
@@ -203,7 +204,7 @@ func (d *Dispatcher) CreateResource(ctx context.Context, params hostrpc.Resource
 
 	input := params.Plan
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "create", params.Plan, nil, nil, "")
+		input = d.marshalModulePayload(params.ResourceType, "create", params.Plan, nil, nil, "")
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "create", input)
@@ -230,7 +231,7 @@ func (d *Dispatcher) UpdateResource(ctx context.Context, params hostrpc.Resource
 
 	input := marshalUpdatePayload(params.State, params.Plan)
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "update", params.Plan, params.State, nil, "")
+		input = d.marshalModulePayload(params.ResourceType, "update", params.Plan, params.State, nil, "")
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "update", input)
@@ -257,7 +258,7 @@ func (d *Dispatcher) DeleteResource(ctx context.Context, params hostrpc.Resource
 
 	input := params.State
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "delete", nil, params.State, nil, "")
+		input = d.marshalModulePayload(params.ResourceType, "delete", nil, params.State, nil, "")
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "delete", input)
@@ -287,7 +288,7 @@ func (d *Dispatcher) ImportResource(ctx context.Context, params hostrpc.Resource
 		return nil, err
 	}
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "import", nil, nil, nil, params.ImportID)
+		input = d.marshalModulePayload(params.ResourceType, "import", nil, nil, nil, params.ImportID)
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "import", input)
@@ -314,7 +315,7 @@ func (d *Dispatcher) ReadDataSource(ctx context.Context, params hostrpc.DataSour
 
 	input := params.Config
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "data_read", nil, nil, params.Config, "")
+		input = d.marshalModulePayload(params.ResourceType, "data_read", nil, nil, params.Config, "")
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "data_read", input)
@@ -379,7 +380,7 @@ func (d *Dispatcher) InvokeAction(ctx context.Context, params hostrpc.ActionInvo
 
 	input := params.Config
 	if usesModuleDispatch(moduleName, params.ResourceType) {
-		input = marshalModulePayload(params.ResourceType, "invoke", nil, nil, params.Config, "")
+		input = d.marshalModulePayload(params.ResourceType, "invoke", nil, nil, params.Config, "")
 	}
 
 	result, err := dispatchRuntimeCall(d.rt, ctx, moduleName, "invoke", input)
@@ -509,10 +510,29 @@ func usesModuleDispatch(moduleName, resourceType string) bool {
 	return moduleName != "" && resourceType != "" && moduleName != resourceType
 }
 
-func marshalModulePayload(resourceType, action string, plan, state, config json.RawMessage, importID string) json.RawMessage {
+func (d *Dispatcher) marshalModulePayload(resourceType, action string, plan, state, config json.RawMessage, importID string) json.RawMessage {
+	return marshalModulePayload(terraformProviderName(d.manifest.Provider), resourceType, action, plan, state, config, importID)
+}
+
+func terraformProviderName(providerName string) string {
+	name := strings.TrimSpace(providerName)
+	if name == "" {
+		return ""
+	}
+	name = strings.NewReplacer("-", "_", ".", "_", "/", "_").Replace(name)
+	if strings.HasPrefix(name, "terraform_provider_") {
+		return name
+	}
+	return "terraform_provider_" + name
+}
+
+func marshalModulePayload(providerName, resourceType, action string, plan, state, config json.RawMessage, importID string) json.RawMessage {
 	payload := map[string]interface{}{
 		"resource_type": resourceType,
 		"action":        action,
+	}
+	if providerName != "" {
+		payload["provider_name"] = providerName
 	}
 
 	if plan != nil {

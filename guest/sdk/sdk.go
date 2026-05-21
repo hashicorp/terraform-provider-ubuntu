@@ -85,7 +85,14 @@ var (
 	resources   = map[string]Resource{}
 	dataSources = map[string]DataSource{}
 	actions     = map[string]Action{}
+
+	currentProviderName string
 )
+
+// ProviderName returns the Terraform provider name for the active request.
+func ProviderName() string {
+	return currentProviderName
+}
 
 // RegisterResource registers a managed resource with the SDK.
 // Call this from an init() function in your plugin.
@@ -146,6 +153,10 @@ func Run() {
 }
 
 func dispatch(req Request) Response {
+	previousProviderName := currentProviderName
+	currentProviderName = req.ProviderName
+	defer func() { currentProviderName = previousProviderName }()
+
 	switch req.Operation {
 	case "get_schema":
 		return handleGetSchema(req)

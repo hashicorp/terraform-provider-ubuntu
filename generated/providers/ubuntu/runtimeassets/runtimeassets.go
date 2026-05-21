@@ -22,7 +22,7 @@ var (
 )
 
 func LoadFromEnv() (assets.Store, error) {
-	return Load(os.Getenv("TF_NIX_ASSET_DIR"))
+	return Load(os.Getenv("TF_LINUX_PROVIDER_ASSET_DIR"))
 }
 
 func Load(overrideDir string) (assets.Store, error) {

@@ -83,7 +83,7 @@ func newOperationJournal() *operationJournal {
 }
 
 func defaultOperationJournalDir() string {
-	if dir := os.Getenv("TF_NIX_EXECUTOR_OPERATIONS_DIR"); dir != "" {
+	if dir := os.Getenv("TF_LINUX_PROVIDER_EXECUTOR_OPERATIONS_DIR"); dir != "" {
 		return dir
 	}
 	return filepath.Join(defaultExecutorJournalBaseDir(), "operations")
@@ -608,23 +608,23 @@ func newJournalOperationID() string {
 }
 
 func defaultExecutorJournalBaseDir() string {
-	if dir := os.Getenv("TF_NIX_EXECUTOR_JOURNAL_DIR"); dir != "" {
+	if dir := os.Getenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR"); dir != "" {
 		return dir
 	}
 
 	if stateHome := os.Getenv("XDG_STATE_HOME"); stateHome != "" {
-		return filepath.Join(stateHome, "tf-nix", "journals")
+		return filepath.Join(stateHome, "tf-linux-provider", "journals")
 	}
 
 	if homeDir, err := os.UserHomeDir(); err == nil && homeDir != "" {
-		return filepath.Join(homeDir, ".local", "state", "tf-nix", "journals")
+		return filepath.Join(homeDir, ".local", "state", "tf-linux-provider", "journals")
 	}
 
 	if userName := firstNonEmpty(os.Getenv("USER"), os.Getenv("LOGNAME")); userName != "" {
-		return filepath.Join(os.TempDir(), "tf-nix", userName, "journals")
+		return filepath.Join(os.TempDir(), "tf-linux-provider", userName, "journals")
 	}
 
-	return filepath.Join(os.TempDir(), "tf-nix", "journals")
+	return filepath.Join(os.TempDir(), "tf-linux-provider", "journals")
 }
 
 func firstNonEmpty(values ...string) string {
@@ -638,7 +638,7 @@ func firstNonEmpty(values ...string) string {
 }
 
 func defaultRestartJournalDir() string {
-	if dir := os.Getenv("TF_NIX_EXECUTOR_ACTIONS_DIR"); dir != "" {
+	if dir := os.Getenv("TF_LINUX_PROVIDER_EXECUTOR_ACTIONS_DIR"); dir != "" {
 		return dir
 	}
 

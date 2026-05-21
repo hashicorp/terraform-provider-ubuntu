@@ -148,7 +148,7 @@ func alloc(size uint32) uint32 {
 	return allocBytes(size)
 }
 
-//go:wasmexport tf_nix_free
+//go:wasmexport tf_linux_provider_free
 func tfNixFree(ptr uint32) {
 	releaseBytes(ptr)
 }
@@ -239,7 +239,7 @@ func handleSchema(request ModuleRequest) interface{} {
 }
 
 func handleModuleRequest(action string, request ModuleRequest) interface{} {
-	req := Request{Operation: action, Resource: request.ResourceType}
+	req := Request{Operation: action, Resource: request.ResourceType, ProviderName: request.ProviderName}
 	if req.Resource == "" {
 		return Response{Error: "missing resource_type"}
 	}

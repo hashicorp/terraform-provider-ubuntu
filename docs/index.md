@@ -35,6 +35,16 @@ The provider accepts the following arguments:
 - `retry_attempts` (Optional, int64) - Maximum executor RPC attempts before surfacing failure to Terraform.
 - `retry_initial_backoff_ms` (Optional, int64) - Initial provider retry backoff in milliseconds for executor RPC failures.
 - `retry_max_backoff_ms` (Optional, int64) - Maximum provider retry backoff in milliseconds for executor RPC failures.
+- `ssh_connect_retry_attempts` (Optional, int64) - Maximum attempts for opening a new pooled SSH session before surfacing failure. Defaults to 30.
+- `ssh_connect_retry_initial_backoff_ms` (Optional, int64) - Initial retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 2000.
+- `ssh_connect_retry_max_backoff_ms` (Optional, int64) - Maximum retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 10000.
+- `ssh_connect_retry_timeout_seconds` (Optional, int64) - Total timeout budget in seconds for opening a new pooled SSH session across retries. Defaults to 480.
+- `ssh_dial_timeout_seconds` (Optional, int64) - Timeout for each TCP dial attempt while opening an SSH transport connection. Defaults to 10 seconds.
+- `ssh_handshake_timeout_seconds` (Optional, int64) - Timeout for each SSH protocol handshake after TCP dial succeeds. Defaults to 15 seconds.
+- `ssh_reconnect_retry_attempts` (Optional, int64) - Maximum attempts for reconnecting an existing pooled SSH session before surfacing failure. Defaults to 30.
+- `ssh_reconnect_retry_initial_backoff_ms` (Optional, int64) - Initial retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 2000.
+- `ssh_reconnect_retry_max_backoff_ms` (Optional, int64) - Maximum retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 10000.
+- `ssh_reconnect_retry_timeout_seconds` (Optional, int64) - Total timeout budget in seconds for reconnecting an existing pooled SSH session across retries. Defaults to 480.
 - `use_post_quantum_hashes` (Optional, bool) - Whether executor-side plugin verification should use the embedded SHAKE256 digest set instead of the conventional BLAKE3 set. Defaults to false.
 
 ## Nested Blocks
@@ -63,7 +73,7 @@ Provider-level SSH connection defaults applied to all hosts.
 
 - `agent` (Optional, bool) - Use the SSH agent for authentication.
 - `certificate` (Optional, string) - PEM-encoded SSH signed certificate.
-- `known_hosts_file` (Optional, string) - Path to an OpenSSH known_hosts file used for host key verification. When unset, the provider falls back to ~/.ssh/known_hosts if it exists.
+- `known_hosts_file` (Optional, string) - Optional path to an OpenSSH known_hosts file. Entries are loaded into provider memory during Configure() and used as an additional host trust source alongside TOFU and state-pinned fingerprints.
 - `private_key` (Optional, string) - PEM-encoded SSH private key.
 - `user` (Optional, string) - SSH username for connecting to targets.
 
@@ -86,6 +96,7 @@ Provider-level SSH connection defaults applied to all hosts.
 - [`ubuntu_symlink`](resources/symlink.md)
 - [`ubuntu_sysctl_entry`](resources/sysctl_entry.md)
 - [`ubuntu_systemd_unit`](resources/systemd_unit.md)
+- [`ubuntu_timesync`](resources/timesync.md)
 - [`ubuntu_timezone`](resources/timezone.md)
 - [`ubuntu_tls_identity`](resources/tls_identity.md)
 - [`ubuntu_trusted_cert`](resources/trusted_cert.md)

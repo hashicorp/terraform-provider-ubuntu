@@ -31,6 +31,10 @@ func (t *LocalTransport) Connect(_ context.Context) error {
 	return nil
 }
 
+func (t *LocalTransport) HostKeyFingerprint() string {
+	return ""
+}
+
 // PushFile writes data directly to the local filesystem.
 func (t *LocalTransport) PushFile(_ context.Context, remotePath string, data []byte, mode os.FileMode) error {
 	dir := filepath.Dir(remotePath)

@@ -20,26 +20,6 @@ func (s ProviderSpec) ReleaseArchiveName(version string, platform ProviderPlatfo
 	return fmt.Sprintf("terraform-provider-%s_%s_%s_%s.zip", s.Name, version, platform.OS, platform.Arch)
 }
 
-func Linux() Catalog {
-	return blueprintCatalog("linux")
-}
-
-func Debian() Catalog {
-	return blueprintCatalog("debian")
-}
-
-func Ubuntu() Catalog {
-	return blueprintCatalog("ubuntu")
-}
-
-func Rocky() Catalog {
-	return blueprintCatalog("rocky")
-}
-
-func RHEL() Catalog {
-	return blueprintCatalog("rhel")
-}
-
 func ServeProvider(ctx context.Context, config coreprovider.ProviderConfig, address string, providerCatalog Catalog) error {
 	p := coreprovider.NewBaseProvider(config)
 	providerCatalog.Register(p, config)

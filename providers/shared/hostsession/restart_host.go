@@ -17,7 +17,7 @@ const (
 	defaultRebootSettle              = 15 * time.Second
 	maxRebootReconnectAttempt        = 20 * time.Second
 	terminalRebootFailureMarkTimeout = 3 * time.Second
-	rebootRecordDir                  = "/var/lib/tf-nix/reboots"
+	rebootRecordDir                  = "/var/lib/tf-linux-provider/reboots"
 )
 
 type RestartHostParams struct {

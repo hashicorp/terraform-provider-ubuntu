@@ -304,12 +304,13 @@ type Action interface {
 
 // Request is the JSON envelope the executor sends to a plugin on stdin.
 type Request struct {
-	Operation string    `json:"operation"`
-	Resource  string    `json:"resource"`
-	State     StateData `json:"state,omitempty"`
-	Plan      StateData `json:"plan,omitempty"`
-	Config    StateData `json:"config,omitempty"`
-	ImportID  string    `json:"import_id,omitempty"`
+	Operation    string    `json:"operation"`
+	Resource     string    `json:"resource"`
+	ProviderName string    `json:"provider_name,omitempty"`
+	State        StateData `json:"state,omitempty"`
+	Plan         StateData `json:"plan,omitempty"`
+	Config       StateData `json:"config,omitempty"`
+	ImportID     string    `json:"import_id,omitempty"`
 }
 
 // Response is the JSON envelope the plugin writes to stdout.
@@ -417,6 +418,7 @@ func normalizeJSONValue(value interface{}) interface{} {
 type ModuleRequest struct {
 	ResourceType string          `json:"resource_type,omitempty"`
 	Action       string          `json:"action,omitempty"`
+	ProviderName string          `json:"provider_name,omitempty"`
 	State        json.RawMessage `json:"state,omitempty"`
 	Plan         json.RawMessage `json:"plan,omitempty"`
 	Config       json.RawMessage `json:"config,omitempty"`

@@ -90,7 +90,7 @@ func TestCommandCreateExecutesWithDefaults(t *testing.T) {
 	state, err := resource.Create(pluginsdk.StateData{
 		"name":              "install_calico",
 		"command":           "kubectl apply -f calico.yaml",
-		"creates":           "/var/lib/tf-nix/calico.installed",
+		"creates":           "/var/lib/tf-linux-provider/calico.installed",
 		"working_directory": "/root",
 		"environment": map[string]string{
 			"KUBECONFIG": "/etc/kubernetes/admin.conf",
@@ -131,7 +131,7 @@ func TestCommandCreateRunAsUsesCreatesStat(t *testing.T) {
 	fileStatCalls := 0
 	pluginsdk.FileStat_ = func(path string) (*pluginsdk.FileStat, error) {
 		fileStatCalls++
-		if path != "/home/tf/tf-nix-command-tf.txt" {
+		if path != "/home/tf/tf-linux-provider-command-tf.txt" {
 			t.Fatalf("unexpected creates path: %s", path)
 		}
 		if fileStatCalls == 1 {
@@ -148,8 +148,8 @@ func TestCommandCreateRunAsUsesCreatesStat(t *testing.T) {
 
 	state, err := resource.Create(pluginsdk.StateData{
 		"name":    "tf-artifact",
-		"command": "printf 'tf command artifact\n' > /home/tf/tf-nix-command-tf.txt",
-		"creates": "/home/tf/tf-nix-command-tf.txt",
+		"command": "printf 'tf command artifact\n' > /home/tf/tf-linux-provider-command-tf.txt",
+		"creates": "/home/tf/tf-linux-provider-command-tf.txt",
 		"run_as":  "tf",
 	})
 	if err != nil {
@@ -181,7 +181,7 @@ func TestCommandUpdateAlwaysExecutesPlanCommand(t *testing.T) {
 	}()
 
 	pluginsdk.FileStat_ = func(path string) (*pluginsdk.FileStat, error) {
-		if path != "/var/lib/tf-nix/join-command.generated" {
+		if path != "/var/lib/tf-linux-provider/join-command.generated" {
 			t.Fatalf("unexpected creates path: %s", path)
 		}
 		return &pluginsdk.FileStat{Path: path}, nil
@@ -198,12 +198,12 @@ func TestCommandUpdateAlwaysExecutesPlanCommand(t *testing.T) {
 		pluginsdk.StateData{
 			"name":    "join_command",
 			"command": "kubeadm token create --print-join-command",
-			"creates": "/var/lib/tf-nix/join-command.generated",
+			"creates": "/var/lib/tf-linux-provider/join-command.generated",
 		},
 		pluginsdk.StateData{
 			"name":    "join_command",
 			"command": "kubeadm token create --ttl 0 --print-join-command",
-			"creates": "/var/lib/tf-nix/join-command.generated",
+			"creates": "/var/lib/tf-linux-provider/join-command.generated",
 		},
 	)
 	if err != nil {
@@ -317,7 +317,7 @@ func TestCommandReadPreservesPriorResultWhenGuardSatisfied(t *testing.T) {
 	}()
 
 	pluginsdk.FileStat_ = func(path string) (*pluginsdk.FileStat, error) {
-		if path != "/var/lib/tf-nix/join-material.json" {
+		if path != "/var/lib/tf-linux-provider/join-material.json" {
 			t.Fatalf("unexpected creates path: %s", path)
 		}
 		return &pluginsdk.FileStat{Path: path}, nil
@@ -331,7 +331,7 @@ func TestCommandReadPreservesPriorResultWhenGuardSatisfied(t *testing.T) {
 	state, err := resource.Read(pluginsdk.StateData{
 		"name":      "worker_join_material",
 		"command":   "kubeadm token create",
-		"creates":   "/var/lib/tf-nix/join-material.json",
+		"creates":   "/var/lib/tf-linux-provider/join-material.json",
 		"stdout":    `{"token":"abc123.0123456789abcdef","ca_cert_hash":"sha256:deadbeef"}`,
 		"stderr":    "warning\n",
 		"exit_code": 0,

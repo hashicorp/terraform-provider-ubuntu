@@ -17,7 +17,7 @@ import (
 	digestutil "github.com/hashicorp/terraform-provider-ubuntu/guest/sdk/digest"
 )
 
-const fileLockDirName = "tf-nix-locks"
+const fileLockDirName = "tf-linux-provider-locks"
 
 const (
 	fileLockDirMode  = os.ModeSticky | 0o777

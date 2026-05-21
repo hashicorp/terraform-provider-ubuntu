@@ -29,7 +29,7 @@ The resource supports the following arguments:
 - `direction` (Optional, Computed, string) - Traffic direction: in or out. Defaults to in.
 - `ensure` (Optional, Computed, string) - Desired rule outcome (present or absent). Defaults to present.
 - `from` (Optional, Computed, string) - Source CIDR, address, or the literal any. Defaults to any.
-- `name` (Required, string) - Stable tf-nix name used to tag and reconcile the managed UFW rule.
+- `name` (Required, string) - Stable tf-linux-provider name used to tag and reconcile the managed UFW rule.
 - `port` (Required, string) - Single destination port or port range for the rule.
 - `protocol` (Optional, Computed, string) - Transport protocol: tcp or udp. Defaults to tcp.
 - `target` (Optional, string) - Target host or address for this resource. Overrides provider default_target.target.
@@ -41,6 +41,7 @@ The resource supports the following arguments:
 
 This resource exports the following attributes:
 
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
 - `rule_comment` (string) - Computed managed UFW comment marker used to identify the rule on-host.
 

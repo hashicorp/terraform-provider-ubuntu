@@ -19,18 +19,24 @@ import (
 )
 
 var (
-	_                     resource.Resource                   = (*GenericResource)(nil)
-	_                     resource.ResourceWithImportState    = (*GenericResource)(nil)
-	_                     resource.ResourceWithConfigure      = (*GenericResource)(nil)
-	_                     resource.ResourceWithValidateConfig = (*GenericResource)(nil)
-	_                     resource.ResourceWithModifyPlan     = (*GenericResource)(nil)
-	_                     resource.Resource                   = (*GenericIdentityResource)(nil)
-	_                     resource.ResourceWithImportState    = (*GenericIdentityResource)(nil)
-	_                     resource.ResourceWithConfigure      = (*GenericIdentityResource)(nil)
-	_                     resource.ResourceWithValidateConfig = (*GenericIdentityResource)(nil)
-	_                     resource.ResourceWithModifyPlan     = (*GenericIdentityResource)(nil)
-	_                     resource.ResourceWithIdentity       = (*GenericIdentityResource)(nil)
-	sendResourceOperation                                     = sendOperation
+	_                        resource.Resource                   = (*GenericResource)(nil)
+	_                        resource.ResourceWithImportState    = (*GenericResource)(nil)
+	_                        resource.ResourceWithConfigure      = (*GenericResource)(nil)
+	_                        resource.ResourceWithValidateConfig = (*GenericResource)(nil)
+	_                        resource.ResourceWithModifyPlan     = (*GenericResource)(nil)
+	_                        resource.Resource                   = (*GenericIdentityResource)(nil)
+	_                        resource.ResourceWithImportState    = (*GenericIdentityResource)(nil)
+	_                        resource.ResourceWithConfigure      = (*GenericIdentityResource)(nil)
+	_                        resource.ResourceWithValidateConfig = (*GenericIdentityResource)(nil)
+	_                        resource.ResourceWithModifyPlan     = (*GenericIdentityResource)(nil)
+	_                        resource.ResourceWithIdentity       = (*GenericIdentityResource)(nil)
+	sendResourceOperation                                        = sendOperation
+	lookupHostKeyFingerprint                                     = func(pool *transport.ConnectionPool, config transport.TransportConfig) string {
+		if pool == nil {
+			return ""
+		}
+		return pool.HostKeyFingerprint(config)
+	}
 )
 
 type ProviderData struct {
@@ -101,6 +107,21 @@ func NewGenericResource(typeName string, def ResourceDefinition) *GenericResourc
 
 func NewGenericIdentityResource(typeName string, def ResourceDefinition) *GenericIdentityResource {
 	return &GenericIdentityResource{GenericResource: NewGenericResource(typeName, def)}
+}
+
+func applyPinnedHostKeyFingerprint(config transport.TransportConfig, fingerprint types.String) transport.TransportConfig {
+	fingerprint = normalizeHostKeyFingerprintValue(fingerprint)
+	if !fingerprint.IsNull() {
+		config.SSHHostKeyFingerprint = fingerprint.ValueString()
+	}
+	return config
+}
+
+func observedHostKeyFingerprintValue(pool *transport.ConnectionPool, config transport.TransportConfig, fallback types.String) types.String {
+	if observed := strings.TrimSpace(lookupHostKeyFingerprint(pool, config)); observed != "" {
+		return types.StringValue(observed)
+	}
+	return normalizeHostKeyFingerprintValue(fallback)
 }
 
 func (r *GenericResource) buildIdentity(ctx context.Context, data map[string]interface{}, hostConfig transport.TransportConfig) (*tfsdk.ResourceIdentity, diag.Diagnostics) {
@@ -321,12 +342,19 @@ func (r *GenericResource) Create(ctx context.Context, req resource.CreateRequest
 
 	resp.Diagnostics.Append(setResourceStateFromJSON(ctx, state, r.attributes, r.blocks, &resp.State)...)
 	resp.Diagnostics.Append(preserveHostFromPlanWithNames(ctx, &req.Plan, &resp.State, r.hostAttrs)...)
+	resp.Diagnostics.Append(setHostKeyFingerprintStateAttributeWithNames(ctx, &resp.State, observedHostKeyFingerprintValue(r.pool, hostConfig, nullHostKeyFingerprint()), r.hostAttrs)...)
 	resp.Diagnostics.Append(preserveAllowDestructiveDestroyFromPlan(ctx, &req.Plan, &resp.State)...)
 	resp.Identity, diagnostics = r.buildIdentity(ctx, state, hostConfig)
 	resp.Diagnostics.Append(diagnostics...)
 }
 
 func (r *GenericResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
+	priorFingerprint, diagnostics := hostKeyFingerprintFromStateWithNames(ctx, &req.State, r.hostAttrs)
+	resp.Diagnostics.Append(diagnostics...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	stateAttrs, diagnostics := stateToJSON(ctx, &req.State, r.attributes, r.blocks)
 	resp.Diagnostics.Append(diagnostics...)
 	if resp.Diagnostics.HasError() {
@@ -338,6 +366,7 @@ func (r *GenericResource) Read(ctx context.Context, req resource.ReadRequest, re
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	hostConfig = applyPinnedHostKeyFingerprint(hostConfig, priorFingerprint)
 
 	stateAttrs, diagnostics = mergeIdentityIntoStateWithNames(ctx, stateAttrs, req.Identity, r.importIdentity, hostConfig, r.hostAttrs)
 	resp.Diagnostics.Append(diagnostics...)
@@ -380,12 +409,24 @@ func (r *GenericResource) Read(ctx context.Context, req resource.ReadRequest, re
 
 	resp.Diagnostics.Append(setResourceStateFromJSON(ctx, state, r.attributes, r.blocks, &resp.State)...)
 	resp.Diagnostics.Append(preserveHostFromStateWithNames(ctx, &req.State, &resp.State, r.hostAttrs)...)
+	resp.Diagnostics.Append(setHostKeyFingerprintStateAttributeWithNames(ctx, &resp.State, observedHostKeyFingerprintValue(r.pool, hostConfig, priorFingerprint), r.hostAttrs)...)
 	resp.Diagnostics.Append(preserveAllowDestructiveDestroyFromState(ctx, &req.State, &resp.State)...)
 	resp.Identity, diagnostics = r.buildIdentity(ctx, state, hostConfig)
 	resp.Diagnostics.Append(diagnostics...)
 }
 
 func (r *GenericResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	priorHostConfig, diagnostics := resolveHostFromStateWithNames(ctx, &req.State, r.defaultHost, r.hostAttrs)
+	resp.Diagnostics.Append(diagnostics...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	priorFingerprint, diagnostics := hostKeyFingerprintFromStateWithNames(ctx, &req.State, r.hostAttrs)
+	resp.Diagnostics.Append(diagnostics...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
 	hostConfig, hostKnown, diagnostics := resolveHostFromPlanIfKnownWithNames(ctx, &req.Plan, r.defaultHost, r.hostAttrs)
 	resp.Diagnostics.Append(diagnostics...)
 	if resp.Diagnostics.HasError() {
@@ -394,6 +435,11 @@ func (r *GenericResource) Update(ctx context.Context, req resource.UpdateRequest
 	if !hostKnown {
 		resp.Diagnostics.AddError("Host is unknown", "Resource host address is still unknown during apply.")
 		return
+	}
+	fingerprintFallback := nullHostKeyFingerprint()
+	if sameTransportEndpoint(priorHostConfig, hostConfig) {
+		hostConfig = applyPinnedHostKeyFingerprint(hostConfig, priorFingerprint)
+		fingerprintFallback = priorFingerprint
 	}
 
 	priorAttrs, diagnostics := stateToJSON(ctx, &req.State, r.attributes, r.blocks)
@@ -446,6 +492,7 @@ func (r *GenericResource) Update(ctx context.Context, req resource.UpdateRequest
 
 	resp.Diagnostics.Append(setResourceStateFromJSON(ctx, state, r.attributes, r.blocks, &resp.State)...)
 	resp.Diagnostics.Append(preserveHostFromPlanWithNames(ctx, &req.Plan, &resp.State, r.hostAttrs)...)
+	resp.Diagnostics.Append(setHostKeyFingerprintStateAttributeWithNames(ctx, &resp.State, observedHostKeyFingerprintValue(r.pool, hostConfig, fingerprintFallback), r.hostAttrs)...)
 	resp.Diagnostics.Append(preserveAllowDestructiveDestroyFromPlan(ctx, &req.Plan, &resp.State)...)
 	resp.Identity, diagnostics = r.buildIdentity(ctx, state, hostConfig)
 	resp.Diagnostics.Append(diagnostics...)
@@ -457,6 +504,12 @@ func (r *GenericResource) Delete(ctx context.Context, req resource.DeleteRequest
 	if resp.Diagnostics.HasError() {
 		return
 	}
+	priorFingerprint, diagnostics := hostKeyFingerprintFromStateWithNames(ctx, &req.State, r.hostAttrs)
+	resp.Diagnostics.Append(diagnostics...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	hostConfig = applyPinnedHostKeyFingerprint(hostConfig, priorFingerprint)
 
 	stateAttrs, diagnostics := stateToJSON(ctx, &req.State, r.attributes, r.blocks)
 	resp.Diagnostics.Append(diagnostics...)
@@ -536,6 +589,7 @@ func (r *GenericResource) ImportState(ctx context.Context, req resource.ImportSt
 			resp.Diagnostics.Append(preserveHostFromAddressWithNames(ctx, targetConfig, &resp.State, r.hostAttrs)...)
 		}
 	}
+	resp.Diagnostics.Append(setHostKeyFingerprintStateAttributeWithNames(ctx, &resp.State, observedHostKeyFingerprintValue(r.pool, hostConfig, nullHostKeyFingerprint()), r.hostAttrs)...)
 	resp.Identity, diagnostics = r.buildIdentity(ctx, state, hostConfig)
 	resp.Diagnostics.Append(diagnostics...)
 }
