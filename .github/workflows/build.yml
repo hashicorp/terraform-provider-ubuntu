@@ -150,7 +150,7 @@ jobs:
       - get-go-version
       - set-product-version
       - runtime-assets
-    runs-on: custom-ubuntu-22.04-large
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: true
       matrix:
