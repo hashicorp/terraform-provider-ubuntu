@@ -1,5 +1,0 @@
-blank_issues_enabled: false
-contact_links:
-  - name: Upstream issues
-    url: https://github.com/hashicorp/terraform-provider-linux/issues
-    about: Report bugs and request features in the source monorepo.

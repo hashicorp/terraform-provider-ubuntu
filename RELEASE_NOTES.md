@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `beece14` CI fix
+- `fc395e8` small CI fix for downstream
 
 ## Scoped Paths
 
@@ -231,4 +231,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-21T21:42:30Z._
+_Generated at 2026-05-21T22:01:30Z._
