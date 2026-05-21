@@ -17,7 +17,9 @@ resource "ubuntu_systemd_unit" "example" {
   target = var.host
   name = "nginx.service"
   enabled = true
-  state = "active"
+  state = "running"
+  service_user = "www-data"
+  service_group = "www-data"
 }
 ```
 ## Argument Reference
@@ -25,14 +27,16 @@ resource "ubuntu_systemd_unit" "example" {
 The resource supports the following arguments:
 
 - `allow_destructive_destroy` (Optional, bool) - Explicitly allow destructive destroy for protected or side-effecting host objects managed by this resource.
-- `content` (Optional, string) - Unit file content (for drop-in or custom units).
+- `content` (Optional, string) - Full unit file content to manage under /etc/systemd/system. Mutually exclusive with service_user and service_group.
 - `enabled` (Optional, Computed, bool) - Whether the unit is enabled at boot.
 - `masked` (Optional, Computed, bool) - Whether the unit is masked.
 - `name` (Required, string) - Systemd unit name (e.g. nginx.service).
 - `port` (Optional, int64) - Target port for this resource. Overrides provider default_target.port.
 - `reload_on_change` (Optional, Computed, bool) - Whether the unit should be reloaded when reload_triggers change and the unit is already active.
 - `reload_triggers` (Optional, list(string)) - Opaque trigger values that force a reload when they change even if the rest of the unit configuration is unchanged.
-- `state` (Optional, Computed, string) - Desired active state (active, inactive, etc.).
+- `service_group` (Optional, string) - Optional Group= value written to a provider-managed service drop-in.
+- `service_user` (Optional, string) - Optional User= value written to a provider-managed service drop-in.
+- `state` (Optional, Computed, string) - Desired service state: running or stopped.
 - `target` (Optional, string) - Target host or address for this resource. Overrides provider default_target.target.
 - `transport` (Optional, string) - Transport for this resource. The current provider surface supports ssh.
 
@@ -40,5 +44,7 @@ The resource supports the following arguments:
 
 This resource exports the following attributes:
 
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
+- `service_identity_dropin_path` (string) - Path to the provider-managed service identity drop-in, when service_user or service_group is configured.
 

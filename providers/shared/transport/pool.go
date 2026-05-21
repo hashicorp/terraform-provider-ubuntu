@@ -16,7 +16,7 @@ const (
 	defaultConnectRetryAttempts  = 30
 	defaultConnectInitialBackoff = 2 * time.Second
 	defaultConnectMaxBackoff     = 10 * time.Second
-	defaultConnectTimeout        = 5 * time.Minute
+	defaultConnectTimeout        = 8 * time.Minute
 	defaultReconnectTimeout      = 8 * time.Minute
 )
 
@@ -27,6 +27,16 @@ type ConnectRetryPolicy struct {
 	TotalTimeout   time.Duration
 }
 
+// ConnectionPoolOptions configures SSH session pooling and connection retry
+// behavior. Zero values preserve the provider defaults.
+type ConnectionPoolOptions struct {
+	MaxConnections      int
+	ConnectRetry        ConnectRetryPolicy
+	ReconnectRetry      ConnectRetryPolicy
+	SSHDialTimeout      time.Duration
+	SSHHandshakeTimeout time.Duration
+}
+
 // SSHConfig holds provider-level SSH defaults that apply to all connections.
 type SSHConfig struct {
 	User           string
@@ -34,18 +44,20 @@ type SSHConfig struct {
 	Certificate    string
 	Agent          bool
 	KnownHostsFile string
+	HostKeyTrust   *HostKeyTrustStore
 }
 
 // Session represents an active transport session to a host, including the
 // running executor process's stdin/stdout.
 type Session struct {
-	Transport   Transport
-	Config      TransportConfig
-	Stdin       io.WriteCloser
-	Stdout      io.ReadCloser
-	LastUsed    time.Time
-	BootstrapMu sync.Mutex
-	inUse       atomic.Int32
+	Transport          Transport
+	Config             TransportConfig
+	Stdin              io.WriteCloser
+	Stdout             io.ReadCloser
+	LastUsed           time.Time
+	HostKeyFingerprint string
+	BootstrapMu        sync.Mutex
+	inUse              atomic.Int32
 }
 
 func (s *Session) AcquireUse() {
@@ -99,45 +111,56 @@ func (a *connectionAttempt) wait(ctx context.Context) (*Session, error) {
 // ConnectionPool manages a pool of transport sessions keyed by transport identity.
 // It is safe for concurrent use.
 type ConnectionPool struct {
-	mu               sync.Mutex
-	sessions         map[string]*Session
-	inflight         map[string]*connectionAttempt
-	maxConns         int
-	connectRetry     ConnectRetryPolicy
-	reconnectRetry   ConnectRetryPolicy
-	config           *SSHConfig
-	transportFactory func(TransportConfig) Transport
+	mu                  sync.Mutex
+	sessions            map[string]*Session
+	inflight            map[string]*connectionAttempt
+	maxConns            int
+	connectRetry        ConnectRetryPolicy
+	reconnectRetry      ConnectRetryPolicy
+	sshDialTimeout      time.Duration
+	sshHandshakeTimeout time.Duration
+	config              *SSHConfig
+	transportFactory    func(TransportConfig) Transport
 }
 
 // NewConnectionPool creates a new connection pool with the given SSH defaults.
 func NewConnectionPool(config *SSHConfig) *ConnectionPool {
-	return &ConnectionPool{
-		sessions:         make(map[string]*Session),
-		inflight:         make(map[string]*connectionAttempt),
-		maxConns:         defaultMaxConns,
-		connectRetry:     defaultConnectRetryPolicy(),
-		reconnectRetry:   defaultReconnectRetryPolicy(),
-		config:           config,
-		transportFactory: newTransport,
-	}
+	return NewConnectionPoolWithOptions(config, ConnectionPoolOptions{})
 }
 
 // NewConnectionPoolWithMax creates a new connection pool with a custom max
 // connection limit.
 func NewConnectionPoolWithMax(config *SSHConfig, maxConns int) *ConnectionPool {
-	if maxConns <= 0 {
-		maxConns = defaultMaxConns
-	}
+	return NewConnectionPoolWithOptions(config, ConnectionPoolOptions{MaxConnections: maxConns})
+}
 
-	return &ConnectionPool{
-		sessions:         make(map[string]*Session),
-		inflight:         make(map[string]*connectionAttempt),
-		maxConns:         maxConns,
-		connectRetry:     defaultConnectRetryPolicy(),
-		reconnectRetry:   defaultReconnectRetryPolicy(),
-		config:           config,
-		transportFactory: newTransport,
+// NewConnectionPoolWithOptions creates a new connection pool with custom
+// pooling, retry, and SSH transport settings.
+func NewConnectionPoolWithOptions(config *SSHConfig, options ConnectionPoolOptions) *ConnectionPool {
+	options = normalizeConnectionPoolOptions(options)
+	pool := &ConnectionPool{
+		sessions:            make(map[string]*Session),
+		inflight:            make(map[string]*connectionAttempt),
+		maxConns:            options.MaxConnections,
+		connectRetry:        options.ConnectRetry,
+		reconnectRetry:      options.ReconnectRetry,
+		sshDialTimeout:      options.SSHDialTimeout,
+		sshHandshakeTimeout: options.SSHHandshakeTimeout,
+		config:              config,
 	}
+	pool.transportFactory = pool.newTransport
+	return pool
+}
+
+func normalizeConnectionPoolOptions(options ConnectionPoolOptions) ConnectionPoolOptions {
+	if options.MaxConnections <= 0 {
+		options.MaxConnections = defaultMaxConns
+	}
+	options.ConnectRetry = normalizeConnectRetryPolicy(options.ConnectRetry, defaultConnectRetryPolicy())
+	options.ReconnectRetry = normalizeConnectRetryPolicy(options.ReconnectRetry, defaultReconnectRetryPolicy())
+	options.SSHDialTimeout = normalizeSSHTimeout(options.SSHDialTimeout, defaultSSHDialTimeout)
+	options.SSHHandshakeTimeout = normalizeSSHTimeout(options.SSHHandshakeTimeout, defaultSSHHandshakeTimeout)
+	return options
 }
 
 func defaultConnectRetryPolicy() ConnectRetryPolicy {
@@ -206,6 +229,9 @@ func (p *ConnectionPool) GetOrCreate(ctx context.Context, hostConfig TransportCo
 				return nil, err
 			}
 			if sess != nil {
+				if err := p.validateSessionTrust(sess, merged); err != nil {
+					return nil, err
+				}
 				sess.LastUsed = time.Now()
 				return sess, nil
 			}
@@ -213,6 +239,10 @@ func (p *ConnectionPool) GetOrCreate(ctx context.Context, hostConfig TransportCo
 		}
 
 		if sess, ok := p.sessions[key]; ok {
+			if err := p.validateSessionTrust(sess, merged); err != nil {
+				p.mu.Unlock()
+				return nil, err
+			}
 			sess.LastUsed = time.Now()
 			p.mu.Unlock()
 			transportLogDebug(ctx, "reused cached SSH session", merged, map[string]interface{}{
@@ -340,6 +370,10 @@ func (p *ConnectionPool) reconnectSession(ctx context.Context, session *Session)
 	session.Stdin = nil
 	session.Stdout = nil
 	session.LastUsed = time.Now()
+	session.HostKeyFingerprint = strings.TrimSpace(transport.HostKeyFingerprint())
+	if session.HostKeyFingerprint != "" {
+		session.Config.SSHHostKeyFingerprint = session.HostKeyFingerprint
+	}
 
 	if oldTransport != nil {
 		if err := oldTransport.Close(); err != nil {
@@ -373,10 +407,15 @@ func (p *ConnectionPool) connectSession(ctx context.Context, config TransportCon
 	if err != nil {
 		return nil, err
 	}
+	fingerprint := strings.TrimSpace(transport.HostKeyFingerprint())
+	if fingerprint != "" {
+		config.SSHHostKeyFingerprint = fingerprint
+	}
 	return &Session{
-		Transport: transport,
-		Config:    config,
-		LastUsed:  time.Now(),
+		Transport:          transport,
+		Config:             config,
+		LastUsed:           time.Now(),
+		HostKeyFingerprint: fingerprint,
 	}, nil
 }
 
@@ -567,11 +606,49 @@ func (p *ConnectionPool) mergeConfig(hostConfig TransportConfig) TransportConfig
 		hostConfig.SSHAgent = true
 	}
 
+	if hostConfig.SSHHostKeyTrust == nil {
+		hostConfig.SSHHostKeyTrust = p.config.HostKeyTrust
+	}
+
 	if hostConfig.SSHKnownHostsFile == "" {
 		hostConfig.SSHKnownHostsFile = p.config.KnownHostsFile
 	}
 
 	return hostConfig
+}
+
+func (p *ConnectionPool) HostKeyFingerprint(config TransportConfig) string {
+	merged := p.mergeConfig(config)
+	key := sessionCacheKey(merged)
+
+	p.mu.Lock()
+	defer p.mu.Unlock()
+
+	if sess := p.sessions[key]; sess != nil {
+		return strings.TrimSpace(sess.HostKeyFingerprint)
+	}
+	return ""
+}
+
+func (p *ConnectionPool) validateSessionTrust(session *Session, config TransportConfig) error {
+	if session == nil {
+		return nil
+	}
+
+	expected := strings.TrimSpace(config.SSHHostKeyFingerprint)
+	observed := strings.TrimSpace(session.HostKeyFingerprint)
+	if expected == "" || observed == "" {
+		if expected != "" && session.Config.SSHHostKeyFingerprint == "" {
+			session.Config.SSHHostKeyFingerprint = expected
+		}
+		return nil
+	}
+	if expected == observed {
+		session.Config.SSHHostKeyFingerprint = expected
+		return nil
+	}
+
+	return fmt.Errorf("ssh host key fingerprint mismatch for %s: expected %s, got %s", config.Endpoint(), expected, observed)
 }
 
 // closeSession closes a session's process handles and transport.
@@ -600,11 +677,22 @@ func (p *ConnectionPool) closeSession(sess *Session) error {
 }
 
 func newTransport(config TransportConfig) Transport {
+	return newTransportWithOptions(config, SSHTransportOptions{})
+}
+
+func (p *ConnectionPool) newTransport(config TransportConfig) Transport {
+	return newTransportWithOptions(config, SSHTransportOptions{
+		DialTimeout:      p.sshDialTimeout,
+		HandshakeTimeout: p.sshHandshakeTimeout,
+	})
+}
+
+func newTransportWithOptions(config TransportConfig, options SSHTransportOptions) Transport {
 	if config.IsLocal() || strings.TrimSpace(config.Target) == "" {
 		return NewLocalTransport(config)
 	}
 
-	return NewSSHTransport(config)
+	return NewSSHTransportWithOptions(config, options)
 }
 
 func preserveFirstErr(current, next error) error {

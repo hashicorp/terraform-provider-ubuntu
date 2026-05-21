@@ -239,7 +239,7 @@ func handleSchema(request ModuleRequest) interface{} {
 }
 
 func handleModuleRequest(action string, request ModuleRequest) interface{} {
-	req := Request{Operation: action, Resource: request.ResourceType}
+	req := Request{Operation: action, Resource: request.ResourceType, ProviderName: request.ProviderName}
 	if req.Resource == "" {
 		return Response{Error: "missing resource_type"}
 	}

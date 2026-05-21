@@ -50,5 +50,6 @@ Optional validation command run against the staged or target file before the man
 This resource exports the following attributes:
 
 - `digest` (string) - Content digest of the file, including the algorithm tag.
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
 

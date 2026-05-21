@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/hashicorp/terraform-provider-ubuntu/guest/sdk"
+	pluginsdk "github.com/hashicorp/terraform-provider-ubuntu/guest/sdk"
 )
 
 func TestRestartProcessActionExplicitCommand(t *testing.T) {
@@ -200,6 +200,150 @@ func TestTimezoneResourceCreateAppliesTimezone(t *testing.T) {
 	}
 }
 
+func TestParseTimesyncdConfig(t *testing.T) {
+	t.Parallel()
+
+	servers, fallbackServers := parseTimesyncdConfig(`
+# comment
+[Time]
+NTP=0.pool.ntp.org 1.pool.ntp.org
+FallbackNTP=2.pool.ntp.org 3.pool.ntp.org
+`)
+
+	if got := strings.Join(servers, ","); got != "0.pool.ntp.org,1.pool.ntp.org" {
+		t.Fatalf("unexpected servers: %q", got)
+	}
+	if got := strings.Join(fallbackServers, ","); got != "2.pool.ntp.org,3.pool.ntp.org" {
+		t.Fatalf("unexpected fallback servers: %q", got)
+	}
+}
+
+func TestNormalizeTimesyncServersRejectsInvalidValues(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name   string
+		values []string
+		want   string
+	}{
+		{name: "empty", values: []string{""}, want: "must not contain empty values"},
+		{name: "whitespace", values: []string{"0.pool.ntp.org extra"}, want: "must not contain whitespace"},
+		{name: "comment", values: []string{"0.pool.ntp.org#bad"}, want: "must not contain comment markers"},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			_, err := normalizeTimesyncServers(test.values, "servers")
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("normalizeTimesyncServers(%#v) error = %v, want substring %q", test.values, err, test.want)
+			}
+		})
+	}
+}
+
+func TestTimesyncResourceCreateWritesConfigAndRestartsService(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origHasCommand := pluginsdk.HasCommand
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.HasCommand = origHasCommand
+	})
+
+	var configContent string
+	commands := make([]string, 0, 8)
+	serviceActive := true
+	serviceEnabled := true
+
+	pluginsdk.HasCommand = func(name string) (bool, error) {
+		return name == "systemctl", nil
+	}
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == timesyncdConfigPath && configContent != "", nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path == timesyncdConfigPath && configContent != "" {
+			return []byte(configContent), nil
+		}
+		return nil, errors.New("missing file")
+	}
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		if path != timesyncdConfigPath {
+			t.Fatalf("unexpected write path: %s", path)
+		}
+		configContent = string(data)
+		return nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		switch {
+		case cmd == "mkdir" && len(args) == 2 && args[0] == "-p" && args[1] == timesyncdConfigDir:
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case cmd == "systemctl" && len(args) == 3 && args[0] == "show" && args[1] == "--property=Version" && args[2] == "--value":
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "255\n"}, nil
+		case cmd == "systemctl" && len(args) == 4 && args[0] == "show":
+			activeState := "active"
+			if !serviceActive {
+				activeState = "inactive"
+			}
+			unitFileState := "enabled"
+			if !serviceEnabled {
+				unitFileState = "disabled"
+			}
+			return &pluginsdk.CmdResult{
+				Stdout:   "LoadState=loaded\nActiveState=" + activeState + "\nSubState=running\nUnitFileState=" + unitFileState + "\n",
+				ExitCode: 0,
+			}, nil
+		case cmd == "systemctl" && len(args) == 2 && args[0] == "enable" && args[1] == timesyncdServiceName:
+			serviceEnabled = true
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case cmd == "systemctl" && len(args) == 2 && args[0] == "restart" && args[1] == timesyncdServiceName:
+			serviceActive = true
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		default:
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+			return nil, nil
+		}
+	}
+
+	state, err := (&timesyncResource{}).Create(pluginsdk.StateData{
+		"servers":          []interface{}{"0.pool.ntp.org", "1.pool.ntp.org"},
+		"fallback_servers": []interface{}{"2.pool.ntp.org"},
+	})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if !state.GetBool("enabled") {
+		t.Fatalf("expected timesync state to be enabled: %#v", state)
+	}
+	if got := state.GetString("backend"); got != timesyncBackendName {
+		t.Fatalf("backend = %q, want %q", got, timesyncBackendName)
+	}
+	if got := strings.Join(state.GetStringList("servers"), ","); got != "0.pool.ntp.org,1.pool.ntp.org" {
+		t.Fatalf("unexpected servers in state: %q", got)
+	}
+	if got := strings.Join(state.GetStringList("fallback_servers"), ","); got != "2.pool.ntp.org" {
+		t.Fatalf("unexpected fallback servers in state: %q", got)
+	}
+	if !strings.Contains(configContent, "NTP=0.pool.ntp.org 1.pool.ntp.org") {
+		t.Fatalf("expected config to contain primary servers, got %q", configContent)
+	}
+	if !strings.Contains(configContent, "FallbackNTP=2.pool.ntp.org") {
+		t.Fatalf("expected config to contain fallback servers, got %q", configContent)
+	}
+	if !containsCommand(commands, "systemctl enable "+timesyncdServiceName) {
+		t.Fatalf("expected enable command, got %#v", commands)
+	}
+	if !containsCommand(commands, "systemctl restart "+timesyncdServiceName) {
+		t.Fatalf("expected restart command, got %#v", commands)
+	}
+}
+
 func TestValidateSystemdUnitContentUsesTmpPath(t *testing.T) {
 	origHasCommand := pluginsdk.HasCommand
 	origFileWrite := pluginsdk.FileWrite
@@ -305,6 +449,89 @@ func TestSystemdUnitValidateRejectsMaskedRunning(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "masked units cannot have state \"running\"") {
 		t.Fatalf("expected masked/running validation error, got %v", err)
+	}
+}
+
+func TestSystemdUnitValidateServiceIdentity(t *testing.T) {
+	origHasCommand := pluginsdk.HasCommand
+	t.Cleanup(func() {
+		pluginsdk.HasCommand = origHasCommand
+	})
+
+	pluginsdk.HasCommand = func(name string) (bool, error) {
+		return name == "systemctl", nil
+	}
+
+	tests := []struct {
+		name   string
+		config pluginsdk.StateData
+		want   string
+	}{
+		{
+			name: "content conflict",
+			config: pluginsdk.StateData{
+				"name":         "nginx",
+				"content":      "[Service]\nExecStart=/usr/bin/nginx\n",
+				"service_user": "www-data",
+			},
+			want: "content cannot be used with service_user or service_group",
+		},
+		{
+			name:   "timer unit",
+			config: pluginsdk.StateData{"name": "nightly.timer", "service_user": "backup"},
+			want:   "can only be used with .service units",
+		},
+		{
+			name:   "empty user",
+			config: pluginsdk.StateData{"name": "nginx", "service_user": "   "},
+			want:   "service_user must not be empty",
+		},
+		{
+			name:   "group whitespace",
+			config: pluginsdk.StateData{"name": "nginx", "service_group": "web users"},
+			want:   "service_group must not contain whitespace",
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			err := (&systemdUnitResource{}).Validate(test.config)
+			if err == nil || !strings.Contains(err.Error(), test.want) {
+				t.Fatalf("Validate error = %v, want substring %q", err, test.want)
+			}
+		})
+	}
+}
+
+func TestServiceIdentityDropInHelpers(t *testing.T) {
+	t.Parallel()
+
+	path := serviceIdentityDropInPath("nginx")
+	if path != "/etc/systemd/system/nginx.service.d/terraform-service-identity.override.conf" {
+		t.Fatalf("drop-in path = %q", path)
+	}
+	rendered := renderServiceIdentityDropIn("app", "www-data")
+	if !strings.HasPrefix(rendered, serviceIdentityDropInManagedLabel()+"\n") {
+		t.Fatalf("expected managed label in rendered drop-in, got %q", rendered)
+	}
+	if !strings.Contains(rendered, "Managed by terraform_provider_linux") {
+		t.Fatalf("expected provider marker in rendered drop-in, got %q", rendered)
+	}
+	if strings.Contains(rendered, "tf-nix") {
+		t.Fatalf("rendered drop-in contains retired project name: %q", rendered)
+	}
+	if isManagedServiceIdentityDropIn("[Service]\n# Managed by terraform_provider_linux. Changes will be overwritten.\n") {
+		t.Fatal("managed marker should only be accepted as the first non-blank line")
+	}
+	if got := normalizeServiceIdentityProviderName("ubuntu"); got != "terraform_provider_ubuntu" {
+		t.Fatalf("normalizeServiceIdentityProviderName(ubuntu) = %q", got)
+	}
+	if got := normalizeServiceIdentityProviderName("terraform_provider_ubuntu"); got != "terraform_provider_ubuntu" {
+		t.Fatalf("normalizeServiceIdentityProviderName(prefixed) = %q", got)
+	}
+	user, group := parseServiceIdentityDropIn(rendered)
+	if user != "app" || group != "www-data" {
+		t.Fatalf("parsed user/group = %q/%q, want app/www-data", user, group)
 	}
 }
 
@@ -431,6 +658,774 @@ func TestSystemdUnitCreateWritesReloadsAndStarts(t *testing.T) {
 	}
 }
 
+func TestSystemdUnitCreateWritesServiceIdentityDropInAndRestartsActiveService(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origDirEnsure := pluginsdk.DirEnsure
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.DirEnsure = origDirEnsure
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	dropInDir := serviceIdentityDropInDir("nginx")
+	files := map[string]string{}
+	var ensuredDir string
+	var ensuredMode uint32
+	pluginsdk.DirEnsure = func(path string, mode uint32) error {
+		ensuredDir = path
+		ensuredMode = mode
+		return nil
+	}
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		_, ok := files[path]
+		return ok, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if data, ok := files[path]; ok {
+			return []byte(data), nil
+		}
+		return nil, errors.New("missing file")
+	}
+	var wrotePath string
+	var wroteMode uint32
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		wrotePath = path
+		wroteMode = mode
+		files[path] = string(data)
+		return nil
+	}
+	var commands []string
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		if cmd != "systemctl" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		switch {
+		case len(args) == 1 && args[0] == "daemon-reload":
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case len(args) == 2 && args[0] == "enable" && args[1] == "nginx.service":
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case len(args) == 2 && args[0] == "restart" && args[1] == "nginx.service":
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case len(args) == 4 && args[0] == "show" && args[2] == "User,Group,DropInPaths":
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "User=app\nGroup=www-data\nDropInPaths=" + dropInPath + "\n"}, nil
+		case len(args) == 4 && args[0] == "show":
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "LoadState=loaded\nActiveState=active\nSubState=running\nUnitFileState=enabled\n"}, nil
+		default:
+			t.Fatalf("unexpected systemctl args: %#v", args)
+			return nil, nil
+		}
+	}
+
+	state, err := (&systemdUnitResource{}).Create(pluginsdk.StateData{
+		"name":          "nginx",
+		"service_user":  "app",
+		"service_group": "www-data",
+		"enabled":       true,
+		"state":         "running",
+	})
+	if err != nil {
+		t.Fatalf("Create returned error: %v", err)
+	}
+	if ensuredDir != dropInDir || ensuredMode != 0o755 {
+		t.Fatalf("DirEnsure = %q %#o, want %q %#o", ensuredDir, ensuredMode, dropInDir, uint32(0o755))
+	}
+	if wrotePath != dropInPath || wroteMode != 0o644 {
+		t.Fatalf("FileWrite = %q %#o, want %q %#o", wrotePath, wroteMode, dropInPath, uint32(0o644))
+	}
+	if got := files[dropInPath]; !strings.Contains(got, "User=app") || !strings.Contains(got, "Group=www-data") {
+		t.Fatalf("unexpected drop-in content: %q", got)
+	}
+	if got := state.GetString("service_user"); got != "app" {
+		t.Fatalf("service_user = %q, want app", got)
+	}
+	if got := state.GetString("service_group"); got != "www-data" {
+		t.Fatalf("service_group = %q, want www-data", got)
+	}
+	if got := state.GetString("service_identity_dropin_path"); got != dropInPath {
+		t.Fatalf("service_identity_dropin_path = %q, want %q", got, dropInPath)
+	}
+	for _, want := range []string{
+		"systemctl daemon-reload",
+		"systemctl show --property User,Group,DropInPaths nginx.service",
+		"systemctl enable nginx.service",
+		"systemctl restart nginx.service",
+	} {
+		if !containsCommand(commands, want) {
+			t.Fatalf("expected command %q, got %#v", want, commands)
+		}
+	}
+}
+
+func TestSystemdUnitCreateRollsBackServiceIdentityDropInOnEffectiveMismatch(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origFileDelete := pluginsdk.FileDelete
+	origDirEnsure := pluginsdk.DirEnsure
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.FileDelete = origFileDelete
+		pluginsdk.DirEnsure = origDirEnsure
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	files := map[string]string{}
+	pluginsdk.DirEnsure = func(string, uint32) error { return nil }
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		_, ok := files[path]
+		return ok, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if data, ok := files[path]; ok {
+			return []byte(data), nil
+		}
+		return nil, errors.New("missing file")
+	}
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		files[path] = string(data)
+		return nil
+	}
+	var deletedPath string
+	pluginsdk.FileDelete = func(path string) error {
+		deletedPath = path
+		delete(files, path)
+		return nil
+	}
+	var commands []string
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		if cmd != "systemctl" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		switch {
+		case len(args) == 1 && args[0] == "daemon-reload":
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case len(args) == 4 && args[0] == "show" && args[2] == "User,Group,DropInPaths":
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "User=other\nGroup=www-data\nDropInPaths=" + dropInPath + " /etc/systemd/system/nginx.service.d/zz-local.conf\n"}, nil
+		default:
+			t.Fatalf("unexpected systemctl args: %#v", args)
+			return nil, nil
+		}
+	}
+
+	_, err := (&systemdUnitResource{}).Create(pluginsdk.StateData{
+		"name":          "nginx",
+		"service_user":  "app",
+		"service_group": "www-data",
+		"state":         "running",
+	})
+	if err == nil || !strings.Contains(err.Error(), "systemd resolved service identity") || !strings.Contains(err.Error(), "zz-local.conf") {
+		t.Fatalf("expected effective identity mismatch error with drop-in detail, got %v", err)
+	}
+	if deletedPath != dropInPath {
+		t.Fatalf("deleted path = %q, want %q", deletedPath, dropInPath)
+	}
+	if _, ok := files[dropInPath]; ok {
+		t.Fatalf("expected rollback to delete newly-created drop-in, got %q", files[dropInPath])
+	}
+	if containsCommand(commands, "systemctl restart nginx.service") || containsCommand(commands, "systemctl start nginx.service") {
+		t.Fatalf("service should not be restarted after identity mismatch: %#v", commands)
+	}
+	if got := countCommand(commands, "systemctl daemon-reload"); got != 2 {
+		t.Fatalf("daemon-reload count = %d, want 2; commands %#v", got, commands)
+	}
+}
+
+func TestSystemdUnitCreateRejectsUnmanagedServiceIdentityDropIn(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origDirEnsure := pluginsdk.DirEnsure
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.DirEnsure = origDirEnsure
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath {
+			t.Fatalf("unexpected read path: %q", path)
+		}
+		return []byte("[Service]\nUser=manual\n"), nil
+	}
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		t.Fatalf("FileWrite should not be called for unmanaged conflict: %s", path)
+		return nil
+	}
+	pluginsdk.DirEnsure = func(path string, mode uint32) error {
+		t.Fatalf("DirEnsure should not be called for unmanaged conflict: %s", path)
+		return nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		t.Fatalf("CmdExec should not be called for unmanaged conflict: %s %#v", cmd, args)
+		return nil, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Create(pluginsdk.StateData{
+		"name":         "nginx",
+		"service_user": "app",
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists and is not managed") {
+		t.Fatalf("expected unmanaged drop-in conflict error, got %v", err)
+	}
+}
+
+func TestSystemdUnitCreateRejectsUnexpectedManagedServiceIdentityDropIn(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origDirEnsure := pluginsdk.DirEnsure
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.DirEnsure = origDirEnsure
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath {
+			t.Fatalf("unexpected read path: %q", path)
+		}
+		return []byte(renderServiceIdentityDropIn("app", "www-data")), nil
+	}
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		t.Fatalf("FileWrite should not be called for unexpected managed drop-in: %s", path)
+		return nil
+	}
+	pluginsdk.DirEnsure = func(path string, mode uint32) error {
+		t.Fatalf("DirEnsure should not be called for unexpected managed drop-in: %s", path)
+		return nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		t.Fatalf("CmdExec should not be called for unexpected managed drop-in: %s %#v", cmd, args)
+		return nil, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Create(pluginsdk.StateData{
+		"name":         "nginx",
+		"service_user": "app",
+	})
+	if err == nil || !strings.Contains(err.Error(), "already exists unexpectedly") {
+		t.Fatalf("expected unexpected managed drop-in error, got %v", err)
+	}
+}
+
+func TestSystemdUnitReadRejectsUnexpectedServiceIdentityDropIn(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath {
+			t.Fatalf("unexpected read path: %q", path)
+		}
+		return []byte(renderServiceIdentityDropIn("app", "www-data")), nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		if cmd != "systemctl" || len(args) != 4 || args[0] != "show" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "LoadState=loaded\nActiveState=active\nSubState=running\nUnitFileState=enabled\n"}, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Read(pluginsdk.StateData{"name": "nginx"})
+	if err == nil || !strings.Contains(err.Error(), "exists unexpectedly") {
+		t.Fatalf("expected unexpected drop-in read error, got %v", err)
+	}
+}
+
+func TestSystemdUnitReadRejectsModifiedServiceIdentityDropIn(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	modified := strings.Replace(renderServiceIdentityDropIn("app", "www-data"), "User=app", "User=manual", 1)
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath {
+			t.Fatalf("unexpected read path: %q", path)
+		}
+		return []byte(modified), nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		if cmd != "systemctl" || len(args) != 4 || args[0] != "show" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "LoadState=loaded\nActiveState=active\nSubState=running\nUnitFileState=enabled\n"}, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Read(pluginsdk.StateData{
+		"name":                         "nginx",
+		"service_user":                 "app",
+		"service_group":                "www-data",
+		"service_identity_dropin_path": dropInPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "modified outside Terraform") {
+		t.Fatalf("expected modified drop-in read error, got %v", err)
+	}
+}
+
+func TestSystemdUnitReadRejectsLaterServiceIdentityOverrideWithoutDaemonReload(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origReadDir := pluginsdk.ReadDir
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.ReadDir = origReadDir
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	dropInDir := serviceIdentityDropInDir("nginx")
+	overridePath := dropInDir + "/zz-local.conf"
+	files := map[string]string{
+		dropInPath:   renderServiceIdentityDropIn("app", "www-data"),
+		overridePath: "[Service]\nUser=manual\n",
+	}
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		if path == dropInDir {
+			return true, nil
+		}
+		_, ok := files[path]
+		return ok, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if data, ok := files[path]; ok {
+			return []byte(data), nil
+		}
+		return nil, errors.New("missing file")
+	}
+	pluginsdk.ReadDir = func(path string) ([]pluginsdk.DirEntry, error) {
+		if path != dropInDir {
+			t.Fatalf("unexpected ReadDir path: %s", path)
+		}
+		return []pluginsdk.DirEntry{{Name: serviceIdentityDropInFile}, {Name: "zz-local.conf"}}, nil
+	}
+	var commands []string
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		if cmd != "systemctl" || len(args) != 4 || args[0] != "show" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "LoadState=loaded\nActiveState=active\nSubState=running\nUnitFileState=enabled\n"}, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Read(pluginsdk.StateData{
+		"name":                         "nginx",
+		"service_user":                 "app",
+		"service_group":                "www-data",
+		"service_identity_dropin_path": dropInPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "higher-priority drop-in") || !strings.Contains(err.Error(), "zz-local.conf") {
+		t.Fatalf("expected later drop-in read error, got %v", err)
+	}
+	if containsCommand(commands, "systemctl daemon-reload") {
+		t.Fatalf("Read must not daemon-reload while detecting later drop-ins: %#v", commands)
+	}
+}
+
+func TestSystemdUnitCreateRejectsLaterServiceIdentityOverrideBeforeWrite(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origDirEnsure := pluginsdk.DirEnsure
+	origReadDir := pluginsdk.ReadDir
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.DirEnsure = origDirEnsure
+		pluginsdk.ReadDir = origReadDir
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	dropInDir := serviceIdentityDropInDir("nginx")
+	overridePath := dropInDir + "/zz-local.conf"
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		switch path {
+		case dropInPath:
+			return false, nil
+		case dropInDir:
+			return true, nil
+		default:
+			return false, nil
+		}
+	}
+	pluginsdk.ReadDir = func(path string) ([]pluginsdk.DirEntry, error) {
+		if path != dropInDir {
+			t.Fatalf("unexpected ReadDir path: %s", path)
+		}
+		return []pluginsdk.DirEntry{{Name: "zz-local.conf"}}, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != overridePath {
+			t.Fatalf("unexpected FileRead path: %s", path)
+		}
+		return []byte("[Service]\nUser=manual\n"), nil
+	}
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		t.Fatalf("FileWrite should not be called before later-drop-in conflict is resolved: %s", path)
+		return nil
+	}
+	pluginsdk.DirEnsure = func(path string, mode uint32) error {
+		t.Fatalf("DirEnsure should not be called before later-drop-in conflict is resolved: %s", path)
+		return nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		t.Fatalf("CmdExec should not be called before later-drop-in conflict is resolved: %s %#v", cmd, args)
+		return nil, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Create(pluginsdk.StateData{
+		"name":         "nginx",
+		"service_user": "app",
+		"state":        "running",
+	})
+	if err == nil || !strings.Contains(err.Error(), "higher-priority drop-in") {
+		t.Fatalf("expected later drop-in create error, got %v", err)
+	}
+}
+
+func TestSystemdUnitUpdateRejectsLaterServiceIdentityOverrideBeforeWrite(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origDirEnsure := pluginsdk.DirEnsure
+	origReadDir := pluginsdk.ReadDir
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.DirEnsure = origDirEnsure
+		pluginsdk.ReadDir = origReadDir
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	dropInDir := serviceIdentityDropInDir("nginx")
+	overridePath := dropInDir + "/zz-local.conf"
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		switch path {
+		case dropInPath, dropInDir:
+			return true, nil
+		default:
+			return false, nil
+		}
+	}
+	pluginsdk.ReadDir = func(path string) ([]pluginsdk.DirEntry, error) {
+		if path != dropInDir {
+			t.Fatalf("unexpected ReadDir path: %s", path)
+		}
+		return []pluginsdk.DirEntry{{Name: serviceIdentityDropInFile}, {Name: "zz-local.conf"}}, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		switch path {
+		case dropInPath:
+			return []byte(renderServiceIdentityDropIn("app", "www-data")), nil
+		case overridePath:
+			return []byte("[Service]\nUser=manual\n"), nil
+		default:
+			t.Fatalf("unexpected FileRead path: %s", path)
+			return nil, nil
+		}
+	}
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		t.Fatalf("FileWrite should not be called before later-drop-in conflict is resolved: %s", path)
+		return nil
+	}
+	pluginsdk.DirEnsure = func(path string, mode uint32) error {
+		t.Fatalf("DirEnsure should not be called before later-drop-in conflict is resolved: %s", path)
+		return nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		t.Fatalf("CmdExec should not be called before later-drop-in conflict is resolved: %s %#v", cmd, args)
+		return nil, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Update(
+		pluginsdk.StateData{
+			"name":                         "nginx",
+			"service_user":                 "app",
+			"service_group":                "www-data",
+			"service_identity_dropin_path": dropInPath,
+		},
+		pluginsdk.StateData{
+			"name":          "nginx",
+			"service_user":  "newapp",
+			"service_group": "www-data",
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "higher-priority drop-in") {
+		t.Fatalf("expected later drop-in update error, got %v", err)
+	}
+}
+
+func TestSystemdUnitUpdateRestoresPreviousServiceIdentityDropInOnEffectiveMismatch(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileWrite := pluginsdk.FileWrite
+	origDirEnsure := pluginsdk.DirEnsure
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileWrite = origFileWrite
+		pluginsdk.DirEnsure = origDirEnsure
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	previous := renderServiceIdentityDropIn("app", "www-data")
+	files := map[string]string{dropInPath: previous}
+	pluginsdk.DirEnsure = func(string, uint32) error { return nil }
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		_, ok := files[path]
+		return ok, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if data, ok := files[path]; ok {
+			return []byte(data), nil
+		}
+		return nil, errors.New("missing file")
+	}
+	pluginsdk.FileWrite = func(path string, data []byte, mode uint32) error {
+		files[path] = string(data)
+		return nil
+	}
+	var commands []string
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		if cmd != "systemctl" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		switch {
+		case len(args) == 1 && args[0] == "daemon-reload":
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case len(args) == 4 && args[0] == "show" && args[2] == "User,Group,DropInPaths":
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "User=override\nGroup=www-data\nDropInPaths=/etc/systemd/system/nginx.service.d/zz-local.conf\n"}, nil
+		default:
+			t.Fatalf("unexpected systemctl args: %#v", args)
+			return nil, nil
+		}
+	}
+
+	_, err := (&systemdUnitResource{}).Update(
+		pluginsdk.StateData{
+			"name":                         "nginx",
+			"service_user":                 "app",
+			"service_group":                "www-data",
+			"service_identity_dropin_path": dropInPath,
+			"state":                        "running",
+		},
+		pluginsdk.StateData{
+			"name":          "nginx",
+			"service_user":  "newapp",
+			"service_group": "www-data",
+			"state":         "running",
+		},
+	)
+	if err == nil || !strings.Contains(err.Error(), "systemd resolved service identity") {
+		t.Fatalf("expected effective identity mismatch error, got %v", err)
+	}
+	if got := files[dropInPath]; got != previous {
+		t.Fatalf("expected rollback to restore previous drop-in content:\nwant %q\n got %q", previous, got)
+	}
+	if containsCommand(commands, "systemctl restart nginx.service") || containsCommand(commands, "systemctl start nginx.service") {
+		t.Fatalf("service should not be restarted after identity mismatch: %#v", commands)
+	}
+	if got := countCommand(commands, "systemctl daemon-reload"); got != 2 {
+		t.Fatalf("daemon-reload count = %d, want 2; commands %#v", got, commands)
+	}
+}
+
+func TestSystemdUnitUpdateRejectsModifiedServiceIdentityDropInBeforeDelete(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileDelete := pluginsdk.FileDelete
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileDelete = origFileDelete
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	modified := strings.Replace(renderServiceIdentityDropIn("app", "www-data"), "Group=www-data", "Group=manual", 1)
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath {
+			t.Fatalf("unexpected read path: %s", path)
+		}
+		return []byte(modified), nil
+	}
+	pluginsdk.FileDelete = func(path string) error {
+		t.Fatalf("FileDelete should not be called for modified drop-in: %s", path)
+		return nil
+	}
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		t.Fatalf("CmdExec should not be called for modified drop-in: %s %#v", cmd, args)
+		return nil, nil
+	}
+
+	_, err := (&systemdUnitResource{}).Update(
+		pluginsdk.StateData{
+			"name":                         "nginx",
+			"service_user":                 "app",
+			"service_group":                "www-data",
+			"service_identity_dropin_path": dropInPath,
+			"state":                        "running",
+		},
+		pluginsdk.StateData{"name": "nginx", "state": "running"},
+	)
+	if err == nil || !strings.Contains(err.Error(), "modified outside Terraform") {
+		t.Fatalf("expected modified drop-in update error, got %v", err)
+	}
+}
+
+func TestValidateEffectiveServiceIdentityIgnoresUnspecifiedGroup(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+	})
+
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		if cmd != "systemctl" || len(args) != 4 || args[0] != "show" || args[2] != "User,Group,DropInPaths" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "User=app\nGroup=other\n"}, nil
+	}
+
+	if err := validateEffectiveServiceIdentity("nginx.service", pluginsdk.StateData{"service_user": "app"}); err != nil {
+		t.Fatalf("validateEffectiveServiceIdentity returned error: %v", err)
+	}
+}
+
+func TestSystemdUnitUpdateRemovesServiceIdentityDropInAndRestartsActiveService(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileDelete := pluginsdk.FileDelete
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileDelete = origFileDelete
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	dropInExists := true
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath && dropInExists, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath || !dropInExists {
+			return nil, errors.New("missing file")
+		}
+		return []byte(renderServiceIdentityDropIn("app", "www-data")), nil
+	}
+	var deletedPath string
+	pluginsdk.FileDelete = func(path string) error {
+		deletedPath = path
+		dropInExists = false
+		return nil
+	}
+	var commands []string
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		if cmd != "systemctl" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		switch {
+		case len(args) == 1 && args[0] == "daemon-reload":
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case len(args) == 2 && args[0] == "restart" && args[1] == "nginx.service":
+			return &pluginsdk.CmdResult{ExitCode: 0}, nil
+		case len(args) == 4 && args[0] == "show":
+			return &pluginsdk.CmdResult{ExitCode: 0, Stdout: "LoadState=loaded\nActiveState=active\nSubState=running\nUnitFileState=enabled\n"}, nil
+		default:
+			t.Fatalf("unexpected systemctl args: %#v", args)
+			return nil, nil
+		}
+	}
+
+	state, err := (&systemdUnitResource{}).Update(
+		pluginsdk.StateData{
+			"name":                         "nginx",
+			"service_user":                 "app",
+			"service_group":                "www-data",
+			"service_identity_dropin_path": dropInPath,
+			"state":                        "running",
+		},
+		pluginsdk.StateData{"name": "nginx", "state": "running"},
+	)
+	if err != nil {
+		t.Fatalf("Update returned error: %v", err)
+	}
+	if deletedPath != dropInPath {
+		t.Fatalf("deleted path = %q, want %q", deletedPath, dropInPath)
+	}
+	if state.GetString("service_user") != "" || state.GetString("service_group") != "" || state.GetString("service_identity_dropin_path") != "" {
+		t.Fatalf("expected service identity to be absent from state, got %#v", state)
+	}
+	for _, want := range []string{
+		"systemctl daemon-reload",
+		"systemctl restart nginx.service",
+	} {
+		if !containsCommand(commands, want) {
+			t.Fatalf("expected command %q, got %#v", want, commands)
+		}
+	}
+}
+
 func TestSystemdUnitDeleteUnmasksStopsDisablesAndRemovesContent(t *testing.T) {
 	origCmdExec := pluginsdk.CmdExec
 	origFileDelete := pluginsdk.FileDelete
@@ -472,6 +1467,110 @@ func TestSystemdUnitDeleteUnmasksStopsDisablesAndRemovesContent(t *testing.T) {
 	}
 	if deletedPath != unitFilePath("nginx") {
 		t.Fatalf("deleted path = %q, want %q", deletedPath, unitFilePath("nginx"))
+	}
+}
+
+func TestSystemdUnitDeleteRemovesServiceIdentityDropIn(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileDelete := pluginsdk.FileDelete
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileDelete = origFileDelete
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath {
+			t.Fatalf("unexpected read path: %s", path)
+		}
+		return []byte(renderServiceIdentityDropIn("app", "")), nil
+	}
+	var deletedPath string
+	pluginsdk.FileDelete = func(path string) error {
+		deletedPath = path
+		return nil
+	}
+	var commands []string
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		if cmd != "systemctl" {
+			t.Fatalf("unexpected command: %s %#v", cmd, args)
+		}
+		return &pluginsdk.CmdResult{ExitCode: 0}, nil
+	}
+
+	err := (&systemdUnitResource{}).Delete(pluginsdk.StateData{
+		"name":                         "nginx",
+		"service_user":                 "app",
+		"service_identity_dropin_path": dropInPath,
+	})
+	if err != nil {
+		t.Fatalf("Delete returned error: %v", err)
+	}
+	wantCommands := []string{
+		"systemctl stop nginx.service",
+		"systemctl disable nginx.service",
+		"systemctl daemon-reload",
+	}
+	if !reflect.DeepEqual(commands, wantCommands) {
+		t.Fatalf("unexpected commands:\nwant %#v\n got %#v", wantCommands, commands)
+	}
+	if deletedPath != dropInPath {
+		t.Fatalf("deleted path = %q, want %q", deletedPath, dropInPath)
+	}
+}
+
+func TestSystemdUnitDeleteReturnsServiceIdentityDropInDeleteError(t *testing.T) {
+	origCmdExec := pluginsdk.CmdExec
+	origFileExists := pluginsdk.FileExists
+	origFileRead := pluginsdk.FileRead
+	origFileDelete := pluginsdk.FileDelete
+	t.Cleanup(func() {
+		pluginsdk.CmdExec = origCmdExec
+		pluginsdk.FileExists = origFileExists
+		pluginsdk.FileRead = origFileRead
+		pluginsdk.FileDelete = origFileDelete
+	})
+
+	dropInPath := serviceIdentityDropInPath("nginx")
+	pluginsdk.FileExists = func(path string) (bool, error) {
+		return path == dropInPath, nil
+	}
+	pluginsdk.FileRead = func(path string) ([]byte, error) {
+		if path != dropInPath {
+			t.Fatalf("unexpected read path: %s", path)
+		}
+		return []byte(renderServiceIdentityDropIn("app", "")), nil
+	}
+	pluginsdk.FileDelete = func(path string) error {
+		if path != dropInPath {
+			t.Fatalf("unexpected delete path: %s", path)
+		}
+		return errors.New("permission denied")
+	}
+	var commands []string
+	pluginsdk.CmdExec = func(cmd string, args []string) (*pluginsdk.CmdResult, error) {
+		commands = append(commands, cmd+" "+strings.Join(args, " "))
+		return &pluginsdk.CmdResult{ExitCode: 0}, nil
+	}
+
+	err := (&systemdUnitResource{}).Delete(pluginsdk.StateData{
+		"name":                         "nginx",
+		"service_user":                 "app",
+		"service_identity_dropin_path": dropInPath,
+	})
+	if err == nil || !strings.Contains(err.Error(), "delete service identity drop-in") {
+		t.Fatalf("expected drop-in delete error, got %v", err)
+	}
+	if containsCommand(commands, "systemctl daemon-reload") {
+		t.Fatalf("daemon-reload should not run after drop-in delete failure: %#v", commands)
 	}
 }
 
@@ -561,4 +1660,23 @@ func TestShellQuoteEscapesSingleQuotes(t *testing.T) {
 	if got := shellQuote("it's complicated"); got != `'it'"'"'s complicated'` {
 		t.Fatalf("shellQuote returned %q", got)
 	}
+}
+
+func containsCommand(commands []string, want string) bool {
+	for _, command := range commands {
+		if command == want {
+			return true
+		}
+	}
+	return false
+}
+
+func countCommand(commands []string, want string) int {
+	count := 0
+	for _, command := range commands {
+		if command == want {
+			count++
+		}
+	}
+	return count
 }

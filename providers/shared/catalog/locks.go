@@ -236,6 +236,25 @@ func timezoneLockPlanner(action string, _ *hostsession.OperationMessage) ([]host
 	}}, nil
 }
 
+func timesyncdLockPlanner(action string, _ *hostsession.OperationMessage) ([]hostsession.LockDescriptor, error) {
+	mode := engine.LockModeForAction(action)
+	return []hostsession.LockDescriptor{
+		{Key: "time:timesync", Mode: mode, Source: "timesync resource"},
+		{Key: "path:/etc/systemd/timesyncd.conf.d/90-tf-nix-timesync.conf", Mode: mode, Source: "timesync resource"},
+		{Key: "service:systemd-timesyncd", Mode: mode, Source: "timesync resource"},
+	}, nil
+}
+
+func chronyTimesyncLockPlanner(action string, _ *hostsession.OperationMessage) ([]hostsession.LockDescriptor, error) {
+	mode := engine.LockModeForAction(action)
+	return []hostsession.LockDescriptor{
+		{Key: "time:timesync", Mode: mode, Source: "timesync resource"},
+		{Key: "path:/etc/chrony.conf", Mode: mode, Source: "timesync resource"},
+		{Key: "path:/etc/chrony.d/90-tf-nix-timesync.conf", Mode: mode, Source: "timesync resource"},
+		{Key: "service:chronyd", Mode: mode, Source: "timesync resource"},
+	}, nil
+}
+
 func aptRepositoryLockPlanner(action string, op *hostsession.OperationMessage) ([]hostsession.LockDescriptor, error) {
 	locks := []hostsession.LockDescriptor{{
 		Key:    "pkgmgr:system",

@@ -3,6 +3,7 @@ package serving
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	frameworkaction "github.com/hashicorp/terraform-plugin-framework/action"
@@ -111,17 +112,27 @@ func (p *BaseProvider) Manager() *hostsession.ExecutorManager {
 // providerModel maps the HCL provider configuration block to Go types
 // for terraform-plugin-framework.
 type providerModel struct {
-	SSH                    *sshModel           `tfsdk:"ssh"`
-	DefaultTarget          *defaultTargetModel `tfsdk:"default_target"`
-	DestroySafety          *destroySafetyModel `tfsdk:"destroy_safety"`
-	EncryptedTunnel        types.Bool          `tfsdk:"encrypted_tunnel"`
-	UsePostQuantumHashes   types.Bool          `tfsdk:"use_post_quantum_hashes"`
-	DualPluginVerification types.Bool          `tfsdk:"dual_plugin_verification"`
-	MaxConnections         types.Int64         `tfsdk:"max_connections"`
-	HostLockTimeoutSeconds types.Int64         `tfsdk:"host_lock_timeout_seconds"`
-	RetryAttempts          types.Int64         `tfsdk:"retry_attempts"`
-	RetryInitialBackoffMs  types.Int64         `tfsdk:"retry_initial_backoff_ms"`
-	RetryMaxBackoffMs      types.Int64         `tfsdk:"retry_max_backoff_ms"`
+	SSH                               *sshModel           `tfsdk:"ssh"`
+	DefaultTarget                     *defaultTargetModel `tfsdk:"default_target"`
+	DestroySafety                     *destroySafetyModel `tfsdk:"destroy_safety"`
+	EncryptedTunnel                   types.Bool          `tfsdk:"encrypted_tunnel"`
+	UsePostQuantumHashes              types.Bool          `tfsdk:"use_post_quantum_hashes"`
+	DualPluginVerification            types.Bool          `tfsdk:"dual_plugin_verification"`
+	MaxConnections                    types.Int64         `tfsdk:"max_connections"`
+	SSHDialTimeoutSeconds             types.Int64         `tfsdk:"ssh_dial_timeout_seconds"`
+	SSHHandshakeTimeoutSeconds        types.Int64         `tfsdk:"ssh_handshake_timeout_seconds"`
+	SSHConnectRetryAttempts           types.Int64         `tfsdk:"ssh_connect_retry_attempts"`
+	SSHConnectRetryInitialBackoffMs   types.Int64         `tfsdk:"ssh_connect_retry_initial_backoff_ms"`
+	SSHConnectRetryMaxBackoffMs       types.Int64         `tfsdk:"ssh_connect_retry_max_backoff_ms"`
+	SSHConnectRetryTimeoutSeconds     types.Int64         `tfsdk:"ssh_connect_retry_timeout_seconds"`
+	SSHReconnectRetryAttempts         types.Int64         `tfsdk:"ssh_reconnect_retry_attempts"`
+	SSHReconnectRetryInitialBackoffMs types.Int64         `tfsdk:"ssh_reconnect_retry_initial_backoff_ms"`
+	SSHReconnectRetryMaxBackoffMs     types.Int64         `tfsdk:"ssh_reconnect_retry_max_backoff_ms"`
+	SSHReconnectRetryTimeoutSeconds   types.Int64         `tfsdk:"ssh_reconnect_retry_timeout_seconds"`
+	HostLockTimeoutSeconds            types.Int64         `tfsdk:"host_lock_timeout_seconds"`
+	RetryAttempts                     types.Int64         `tfsdk:"retry_attempts"`
+	RetryInitialBackoffMs             types.Int64         `tfsdk:"retry_initial_backoff_ms"`
+	RetryMaxBackoffMs                 types.Int64         `tfsdk:"retry_max_backoff_ms"`
 }
 
 type sshModel struct {
@@ -179,7 +190,7 @@ func (p *BaseProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 						Optional:    true,
 					},
 					"known_hosts_file": schema.StringAttribute{
-						Description: "Path to an OpenSSH known_hosts file used for host key verification. When unset, the provider falls back to ~/.ssh/known_hosts if it exists.",
+						Description: "Optional path to an OpenSSH known_hosts file. Entries are loaded into provider memory during Configure() and used as an additional host trust source alongside TOFU and state-pinned fingerprints.",
 						Optional:    true,
 					},
 				},
@@ -249,6 +260,46 @@ func (p *BaseProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 				Description: "Maximum number of concurrent SSH connections in the pool.",
 				Optional:    true,
 			},
+			"ssh_dial_timeout_seconds": schema.Int64Attribute{
+				Description: "Timeout for each TCP dial attempt while opening an SSH transport connection. Defaults to 10 seconds.",
+				Optional:    true,
+			},
+			"ssh_handshake_timeout_seconds": schema.Int64Attribute{
+				Description: "Timeout for each SSH protocol handshake after TCP dial succeeds. Defaults to 15 seconds.",
+				Optional:    true,
+			},
+			"ssh_connect_retry_attempts": schema.Int64Attribute{
+				Description: "Maximum attempts for opening a new pooled SSH session before surfacing failure. Defaults to 30.",
+				Optional:    true,
+			},
+			"ssh_connect_retry_initial_backoff_ms": schema.Int64Attribute{
+				Description: "Initial retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 2000.",
+				Optional:    true,
+			},
+			"ssh_connect_retry_max_backoff_ms": schema.Int64Attribute{
+				Description: "Maximum retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 10000.",
+				Optional:    true,
+			},
+			"ssh_connect_retry_timeout_seconds": schema.Int64Attribute{
+				Description: "Total timeout budget in seconds for opening a new pooled SSH session across retries. Defaults to 480.",
+				Optional:    true,
+			},
+			"ssh_reconnect_retry_attempts": schema.Int64Attribute{
+				Description: "Maximum attempts for reconnecting an existing pooled SSH session before surfacing failure. Defaults to 30.",
+				Optional:    true,
+			},
+			"ssh_reconnect_retry_initial_backoff_ms": schema.Int64Attribute{
+				Description: "Initial retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 2000.",
+				Optional:    true,
+			},
+			"ssh_reconnect_retry_max_backoff_ms": schema.Int64Attribute{
+				Description: "Maximum retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 10000.",
+				Optional:    true,
+			},
+			"ssh_reconnect_retry_timeout_seconds": schema.Int64Attribute{
+				Description: "Total timeout budget in seconds for reconnecting an existing pooled SSH session across retries. Defaults to 480.",
+				Optional:    true,
+			},
 			"host_lock_timeout_seconds": schema.Int64Attribute{
 				Description: "Optional timeout for waiting on the cross-workspace per-host execution lock. When unset or 0, waits indefinitely.",
 				Optional:    true,
@@ -279,7 +330,7 @@ func (p *BaseProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	}
 
 	// Build SSH config from provider block.
-	sshConfig := &transport.SSHConfig{}
+	sshConfig := &transport.SSHConfig{HostKeyTrust: transport.NewHostKeyTrustStore()}
 	if config.SSH != nil {
 		if !config.SSH.User.IsNull() {
 			sshConfig.User = config.SSH.User.ValueString()
@@ -294,21 +345,50 @@ func (p *BaseProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 			sshConfig.Agent = config.SSH.Agent.ValueBool()
 		}
 		if !config.SSH.KnownHostsFile.IsNull() {
-			sshConfig.KnownHostsFile = config.SSH.KnownHostsFile.ValueString()
+			sshConfig.KnownHostsFile = strings.TrimSpace(config.SSH.KnownHostsFile.ValueString())
 		}
+	}
+	if err := sshConfig.HostKeyTrust.LoadKnownHostsFile(sshConfig.KnownHostsFile); err != nil {
+		resp.Diagnostics.AddError("Invalid SSH known_hosts file", err.Error())
+		return
 	}
 
 	// Create connection pool.
-	maxConns := 0
+	poolOptions := transport.ConnectionPoolOptions{}
 	if !config.MaxConnections.IsNull() {
-		maxConns = int(config.MaxConnections.ValueInt64())
+		poolOptions.MaxConnections = int(config.MaxConnections.ValueInt64())
 	}
-
-	if maxConns > 0 {
-		p.pool = transport.NewConnectionPoolWithMax(sshConfig, maxConns)
-	} else {
-		p.pool = transport.NewConnectionPool(sshConfig)
+	if !config.SSHDialTimeoutSeconds.IsNull() {
+		poolOptions.SSHDialTimeout = time.Duration(config.SSHDialTimeoutSeconds.ValueInt64()) * time.Second
 	}
+	if !config.SSHHandshakeTimeoutSeconds.IsNull() {
+		poolOptions.SSHHandshakeTimeout = time.Duration(config.SSHHandshakeTimeoutSeconds.ValueInt64()) * time.Second
+	}
+	if !config.SSHConnectRetryAttempts.IsNull() {
+		poolOptions.ConnectRetry.MaxAttempts = int(config.SSHConnectRetryAttempts.ValueInt64())
+	}
+	if !config.SSHConnectRetryInitialBackoffMs.IsNull() {
+		poolOptions.ConnectRetry.InitialBackoff = time.Duration(config.SSHConnectRetryInitialBackoffMs.ValueInt64()) * time.Millisecond
+	}
+	if !config.SSHConnectRetryMaxBackoffMs.IsNull() {
+		poolOptions.ConnectRetry.MaxBackoff = time.Duration(config.SSHConnectRetryMaxBackoffMs.ValueInt64()) * time.Millisecond
+	}
+	if !config.SSHConnectRetryTimeoutSeconds.IsNull() {
+		poolOptions.ConnectRetry.TotalTimeout = time.Duration(config.SSHConnectRetryTimeoutSeconds.ValueInt64()) * time.Second
+	}
+	if !config.SSHReconnectRetryAttempts.IsNull() {
+		poolOptions.ReconnectRetry.MaxAttempts = int(config.SSHReconnectRetryAttempts.ValueInt64())
+	}
+	if !config.SSHReconnectRetryInitialBackoffMs.IsNull() {
+		poolOptions.ReconnectRetry.InitialBackoff = time.Duration(config.SSHReconnectRetryInitialBackoffMs.ValueInt64()) * time.Millisecond
+	}
+	if !config.SSHReconnectRetryMaxBackoffMs.IsNull() {
+		poolOptions.ReconnectRetry.MaxBackoff = time.Duration(config.SSHReconnectRetryMaxBackoffMs.ValueInt64()) * time.Millisecond
+	}
+	if !config.SSHReconnectRetryTimeoutSeconds.IsNull() {
+		poolOptions.ReconnectRetry.TotalTimeout = time.Duration(config.SSHReconnectRetryTimeoutSeconds.ValueInt64()) * time.Second
+	}
+	p.pool = transport.NewConnectionPoolWithOptions(sshConfig, poolOptions)
 
 	// Create executor manager.
 	p.manager = hostsession.NewExecutorManager(p.pool, p.config.Assets)

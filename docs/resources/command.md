@@ -46,6 +46,7 @@ The resource supports the following arguments:
 This resource exports the following attributes:
 
 - `exit_code` (int64) - Exit code from the most recent command execution.
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
 - `stderr` (string) - Captured stderr from the most recent command execution.
 - `stdout` (string) - Captured stdout from the most recent command execution.

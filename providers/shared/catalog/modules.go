@@ -15,6 +15,7 @@ const (
 	ModuleUbuntuUFW      = "ubuntu_ufw"
 	ModuleRedHatDnf      = "redhat_dnf"
 	ModuleRedHatFirewall = "redhat_firewalld"
+	ModuleRedHatTimesync = "redhat_timesync"
 	ModuleRedHatTrust    = "redhat_trust"
 )
 
@@ -44,6 +45,8 @@ func RuntimeModuleSourceRepoPath(module string) (string, bool) {
 		return path.Join("guest", "packs", "redhat", "dnf_repository"), true
 	case ModuleRedHatFirewall:
 		return path.Join("guest", "packs", "redhat", "firewalld"), true
+	case ModuleRedHatTimesync:
+		return path.Join("guest", "packs", "redhat", "timesync"), true
 	case ModuleRedHatTrust:
 		return path.Join("guest", "packs", "redhat", "trusted_cert"), true
 	default:

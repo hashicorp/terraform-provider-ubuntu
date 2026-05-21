@@ -1,4 +1,4 @@
-# ubuntu v0.1.82
+# ubuntu v0.1.83
 
 Generated automatically from the provider manifest and scoped git history.
 
@@ -7,7 +7,7 @@ Generated automatically from the provider manifest and scoped git history.
 - Provider address: `registry.terraform.io/hashicorp/ubuntu`
 - Lifecycle: `beta`
 - Support policy: `ubuntu-beta`
-- Release tag: `ubuntu/v0.1.82`
+- Release tag: `ubuntu/v0.1.83`
 - Previous tag: none discovered
 - Local smoke lane: `acceptance:smoke`
 - Support-matrix fixture: `smoke`
@@ -15,13 +15,13 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Public Surface Snapshot
 
-- Resources: `reboot_barrier`, `ubuntu_apt_repository`, `ubuntu_command`, `ubuntu_crontab_entry`, `ubuntu_file`, `ubuntu_fstab_entry`, `ubuntu_group`, `ubuntu_hosts_entry`, `ubuntu_kernel_modules`, `ubuntu_network_stack`, `ubuntu_package`, `ubuntu_package_lock`, `ubuntu_sshd_config`, `ubuntu_swap`, `ubuntu_symlink`, `ubuntu_sysctl_entry`, `ubuntu_systemd_unit`, `ubuntu_timezone`, `ubuntu_tls_identity`, `ubuntu_trusted_cert`, `ubuntu_ufw_rule`, `ubuntu_user`
+- Resources: `reboot_barrier`, `ubuntu_apt_repository`, `ubuntu_command`, `ubuntu_crontab_entry`, `ubuntu_file`, `ubuntu_fstab_entry`, `ubuntu_group`, `ubuntu_hosts_entry`, `ubuntu_kernel_modules`, `ubuntu_network_stack`, `ubuntu_package`, `ubuntu_package_lock`, `ubuntu_sshd_config`, `ubuntu_swap`, `ubuntu_symlink`, `ubuntu_sysctl_entry`, `ubuntu_systemd_unit`, `ubuntu_timesync`, `ubuntu_timezone`, `ubuntu_tls_identity`, `ubuntu_trusted_cert`, `ubuntu_ufw_rule`, `ubuntu_user`
 - Data sources: `ubuntu_file_info`, `ubuntu_mounts`, `ubuntu_network_interfaces`, `ubuntu_os_release`, `ubuntu_system_info`, `ubuntu_systemd_unit_info`
 - Actions: `restart_host`, `ubuntu_restart_process`, `ubuntu_run_command`
 
 ## Scoped Commits
 
-- `b214078` docs changes, acceptance harness fix for Vault
+- `275cdd9` CI optimizations
 
 ## Scoped Paths
 
@@ -77,7 +77,6 @@ Generated automatically from the provider manifest and scoped git history.
 - `guest/packs/linux/files_config/wrapper_resources_test.go`
 - `guest/packs/linux/identity/main.go`
 - `guest/packs/linux/identity/main_test.go`
-- `guest/packs/linux/kubeadm/main.go`
 - `guest/packs/linux/packages/main.go`
 - `guest/packs/linux/packages/main_test.go`
 - `guest/packs/linux/tls_identity/main.go`
@@ -111,6 +110,8 @@ Generated automatically from the provider manifest and scoped git history.
 - `guest/sdk/contracts/redhatfirewalld/schema_test.go`
 - `guest/sdk/contracts/systemd/schema.go`
 - `guest/sdk/contracts/systemd/schema_test.go`
+- `guest/sdk/contracts/timesync/schema.go`
+- `guest/sdk/contracts/timesync/schema_test.go`
 - `guest/sdk/contracts/trustedcert/schema.go`
 - `guest/sdk/contracts/trustedcert/schema_test.go`
 - `guest/sdk/contracts/ubuntuufw/schema.go`
@@ -207,6 +208,7 @@ Generated automatically from the provider manifest and scoped git history.
 - `providers/shared/serving/runtime_assets_test.go`
 - `providers/shared/serving/version.go`
 - `providers/shared/serving/version_test.go`
+- `providers/shared/transport/hostkeys.go`
 - `providers/shared/transport/local.go`
 - `providers/shared/transport/logging.go`
 - `providers/shared/transport/pool.go`
@@ -227,4 +229,4 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-19T17:39:15Z._
+_Generated at 2026-05-21T20:00:25Z._

@@ -181,12 +181,19 @@ func TestDispatcherHelpersAndHostCommand(t *testing.T) {
 	if usesModuleDispatch("resource", "resource") || usesModuleDispatch("", "resource") {
 		t.Fatal("usesModuleDispatch() should be false when module is empty or matches resource")
 	}
-	modulePayload := marshalModulePayload("resource", "invoke", json.RawMessage(`{"plan":1}`), json.RawMessage(`{"state":2}`), json.RawMessage(`{"config":3}`), "import-1")
+	if got := terraformProviderName("ubuntu"); got != "terraform_provider_ubuntu" {
+		t.Fatalf("terraformProviderName(ubuntu) = %q", got)
+	}
+	if got := terraformProviderName("test-provider"); got != "terraform_provider_test_provider" {
+		t.Fatalf("terraformProviderName(test-provider) = %q", got)
+	}
+	modulePayload := marshalModulePayload("terraform_provider_ubuntu", "resource", "invoke", json.RawMessage(`{"plan":1}`), json.RawMessage(`{"state":2}`), json.RawMessage(`{"config":3}`), "import-1")
+	assertModuleDispatchJSON(t, modulePayload, "resource", "invoke", "provider_name", json.RawMessage(`"terraform_provider_ubuntu"`))
 	assertModuleDispatchJSON(t, modulePayload, "resource", "invoke", "plan", json.RawMessage(`{"plan":1}`))
 	assertModuleDispatchJSON(t, modulePayload, "resource", "invoke", "state", json.RawMessage(`{"state":2}`))
 	assertModuleDispatchJSON(t, modulePayload, "resource", "invoke", "config", json.RawMessage(`{"config":3}`))
 	assertModuleDispatchJSON(t, modulePayload, "resource", "invoke", "import_id", json.RawMessage(`"import-1"`))
-	if got := string(marshalModulePayload("resource", "read", nil, nil, json.RawMessage(`{invalid}`), "")); got != `{invalid}` {
+	if got := string(marshalModulePayload("", "resource", "read", nil, nil, json.RawMessage(`{invalid}`), "")); got != `{invalid}` {
 		t.Fatalf("marshalModulePayload(invalid config) = %q, want config fallback", got)
 	}
 	if got := string(mustMarshalString("demo")); got != `"demo"` {

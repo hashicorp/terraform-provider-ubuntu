@@ -205,7 +205,7 @@ func releaseLayerRegistry() []ReleaseLayer {
 		},
 		{
 			Name:            "systemd-shared",
-			FragmentAliases: []string{"systemd_units"},
+			FragmentAliases: []string{"systemd_units", "systemd_timesync"},
 			PathHints:       []string{"guest/packs/systemd/", "providers/shared/catalog/systemd.go"},
 			DefaultBump:     ReleaseBumpMinor,
 		},
@@ -217,7 +217,7 @@ func releaseLayerRegistry() []ReleaseLayer {
 		},
 		{
 			Name:            "redhat-family",
-			FragmentAliases: []string{"redhat_dnf", "redhat_firewalld", "redhat_trust"},
+			FragmentAliases: []string{"redhat_dnf", "redhat_firewalld", "redhat_timesync", "redhat_trust"},
 			PathHints:       []string{"guest/packs/redhat/", "providers/shared/catalog/redhat_"},
 			DefaultBump:     ReleaseBumpMinor,
 		},
@@ -298,12 +298,14 @@ func fragmentRegistry() map[string]FragmentFactory {
 		"linux_network":    LinuxNetwork,
 		"linux_tls":        LinuxTLS,
 		"systemd_units":    Systemd,
+		"systemd_timesync": SystemdTimesync,
 		"debian_apt":       DebianApt,
 		"debian_trust":     DebianTrust,
 		"ubuntu_ufw":       UbuntuUFW,
 		"ubuntu_delta":     UbuntuDelta,
 		"redhat_dnf":       RedHatDnf,
 		"redhat_firewalld": RedHatFirewalld,
+		"redhat_timesync":  RedHatTimesync,
 		"redhat_trust":     RedHatTrust,
 		"rocky_delta":      RockyDelta,
 		"rhel_delta":       RHELDelta,
@@ -340,7 +342,7 @@ func providerBlueprints() []ProviderBlueprint {
 		{
 			Name:      "debian",
 			Address:   "registry.terraform.io/hashicorp/debian",
-			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "debian_apt", "debian_trust"},
+			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "systemd_timesync", "debian_apt", "debian_trust"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:     ProviderLifecycleDirect,
 				Publishable:   true,
@@ -351,7 +353,7 @@ func providerBlueprints() []ProviderBlueprint {
 		{
 			Name:      "rocky",
 			Address:   "registry.terraform.io/hashicorp/rocky",
-			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "redhat_dnf", "redhat_firewalld", "redhat_trust", "rocky_delta"},
+			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "redhat_timesync", "redhat_dnf", "redhat_firewalld", "redhat_trust", "rocky_delta"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:             ProviderLifecycleBeta,
 				Publishable:           true,
@@ -364,7 +366,7 @@ func providerBlueprints() []ProviderBlueprint {
 		{
 			Name:      "rhel",
 			Address:   "registry.terraform.io/hashicorp/rhel",
-			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "redhat_dnf", "redhat_firewalld", "redhat_trust", "rhel_delta"},
+			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "redhat_timesync", "redhat_dnf", "redhat_firewalld", "redhat_trust", "rhel_delta"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:            ProviderLifecycleBeta,
 				Publishable:          true,
@@ -376,7 +378,7 @@ func providerBlueprints() []ProviderBlueprint {
 		{
 			Name:      "ubuntu",
 			Address:   "registry.terraform.io/hashicorp/ubuntu",
-			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "debian_apt", "debian_trust", "ubuntu_ufw", "ubuntu_delta"},
+			Fragments: []string{"linux_lifecycle", "linux_commands", "linux_files", "linux_identity", "linux_packages", "linux_facts", "linux_network", "linux_tls", "systemd_units", "systemd_timesync", "debian_apt", "debian_trust", "ubuntu_ufw", "ubuntu_delta"},
 			SpecOptions: providerSpecOptions{
 				Lifecycle:             ProviderLifecycleBeta,
 				Publishable:           true,
