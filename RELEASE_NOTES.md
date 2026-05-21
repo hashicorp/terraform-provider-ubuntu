@@ -21,7 +21,7 @@ Generated automatically from the provider manifest and scoped git history.
 
 ## Scoped Commits
 
-- `275cdd9` CI optimizations
+- `e544b77` removing excess code
 
 ## Scoped Paths
 
@@ -226,7 +226,9 @@ Generated automatically from the provider manifest and scoped git history.
 - `tools/providers/docsgen/server_test.go`
 - `tools/providers/run/main.go`
 - `tools/providers/run/main_test.go`
+- `tools/providers/runtime_plugins.go`
+- `tools/providers/runtime_plugins_test.go`
 - `tools/providers/scaffold.go`
 - `tools/providers/scaffold_test.go`
 
-_Generated at 2026-05-21T20:00:25Z._
+_Generated at 2026-05-21T21:08:38Z._
