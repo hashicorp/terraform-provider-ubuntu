@@ -34,7 +34,7 @@ func newRebootJournal() *rebootJournal {
 }
 
 func defaultRebootJournalDir() string {
-	if dir := os.Getenv("TF_NIX_EXECUTOR_REBOOT_JOURNAL_DIR"); dir != "" {
+	if dir := os.Getenv("TF_LINUX_PROVIDER_EXECUTOR_REBOOT_JOURNAL_DIR"); dir != "" {
 		return dir
 	}
 	return filepath.Join(defaultExecutorJournalBaseDir(), "reboots")

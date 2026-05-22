@@ -22,25 +22,29 @@ import (
 )
 
 const (
-	targetAttributeName          = "target"
-	portAttributeName            = "port"
-	transportAttributeName       = "transport"
-	targetHostAttributeName      = "target_host"
-	targetPortAttributeName      = "target_port"
-	targetTransportAttributeName = "target_transport"
+	targetAttributeName                   = "target"
+	portAttributeName                     = "port"
+	transportAttributeName                = "transport"
+	hostKeyFingerprintAttributeName       = "host_key_fingerprint"
+	targetHostAttributeName               = "target_host"
+	targetPortAttributeName               = "target_port"
+	targetTransportAttributeName          = "target_transport"
+	targetHostKeyFingerprintAttributeName = "target_host_key_fingerprint"
 )
 
 type transportAttributeNames struct {
-	target    string
-	port      string
-	transport string
+	target             string
+	port               string
+	transport          string
+	hostKeyFingerprint string
 }
 
 func defaultTransportAttributeNames() transportAttributeNames {
 	return transportAttributeNames{
-		target:    targetAttributeName,
-		port:      portAttributeName,
-		transport: transportAttributeName,
+		target:             targetAttributeName,
+		port:               portAttributeName,
+		transport:          transportAttributeName,
+		hostKeyFingerprint: hostKeyFingerprintAttributeName,
 	}
 }
 
@@ -63,6 +67,9 @@ func transportAttributeNamesForResourceSchema(attrs map[string]resourceschema.At
 	if _, ok := result[transportAttributeName]; ok {
 		names.transport = targetTransportAttributeName
 	}
+	if _, ok := result[hostKeyFingerprintAttributeName]; ok {
+		names.hostKeyFingerprint = targetHostKeyFingerprintAttributeName
+	}
 	return names
 }
 
@@ -71,7 +78,7 @@ func resourceSchemaAttributes(
 	customize ResourceSchemaCustomizer,
 	destroySafety DestroySafetyPolicy,
 ) map[string]resourceschema.Attribute {
-	extraAttrs := 4
+	extraAttrs := 5
 	if destroySafetyUsesAllowFlag(destroySafety.Mode) {
 		extraAttrs++
 	}
@@ -92,6 +99,9 @@ func resourceSchemaAttributes(
 	if _, ok := result[transportAttributeName]; ok {
 		hostAttrs.transport = targetTransportAttributeName
 	}
+	if _, ok := result[hostKeyFingerprintAttributeName]; ok {
+		hostAttrs.hostKeyFingerprint = targetHostKeyFingerprintAttributeName
+	}
 
 	result["id"] = resourceschema.StringAttribute{
 		Description: "Unique identifier for this resource.",
@@ -103,6 +113,7 @@ func resourceSchemaAttributes(
 	result[hostAttrs.target] = commonResourceTargetAttribute()
 	result[hostAttrs.port] = commonResourcePortAttribute()
 	result[hostAttrs.transport] = commonResourceTransportAttribute()
+	result[hostAttrs.hostKeyFingerprint] = commonResourceHostKeyFingerprintAttribute()
 	if destroySafetyUsesAllowFlag(destroySafety.Mode) {
 		result["allow_destructive_destroy"] = resourceschema.BoolAttribute{
 			Description: "Explicitly allow destructive destroy for protected or side-effecting host objects managed by this resource.",
@@ -191,6 +202,17 @@ func commonResourceTransportAttribute() resourceschema.StringAttribute {
 	return resourceschema.StringAttribute{
 		Description: "Transport for this resource. The current provider surface supports ssh.",
 		Optional:    true,
+	}
+}
+
+func commonResourceHostKeyFingerprintAttribute() resourceschema.StringAttribute {
+	return resourceschema.StringAttribute{
+		Description: "Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.",
+		Computed:    true,
+		Sensitive:   true,
+		PlanModifiers: []planmodifier.String{
+			stringplanmodifier.UseStateForUnknown(),
+		},
 	}
 }
 
@@ -383,6 +405,19 @@ func finalizeTransportConfig(config transport.TransportConfig, diagnostics diag.
 		config.Port = transport.DefaultSSHPort
 	}
 	return config, true, diagnostics
+}
+
+func sameTransportEndpoint(left, right transport.TransportConfig) bool {
+	if left.NormalizedTransport() != right.NormalizedTransport() {
+		return false
+	}
+	if left.NormalizedTarget() != right.NormalizedTarget() {
+		return false
+	}
+	if left.IsLocal() || right.IsLocal() {
+		return left.IsLocal() && right.IsLocal()
+	}
+	return left.ResolvedPort() == right.ResolvedPort()
 }
 
 func defaultExecutionContext(requiredPrivilege string, sources ...map[string]interface{}) *hostrpc.ExecutionContext {

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -29,32 +30,53 @@ const (
 	sshStderrTailSize          = 16 << 10
 )
 
-var knownHostsFileMu sync.Mutex
-
 // SSHTransport implements Transport over an SSH connection.
 type SSHTransport struct {
-	config           TransportConfig
-	client           *ssh.Client
-	dialTimeout      time.Duration
-	handshakeTimeout time.Duration
-	dialContext      func(context.Context, string, string) (net.Conn, error)
-	newClientConn    func(net.Conn, string, *ssh.ClientConfig) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error)
-	newSFTPClient    func() (sftpUploadClient, error)
-	runCommandFunc   func(context.Context, string) error
+	config             TransportConfig
+	client             *ssh.Client
+	hostKeyFingerprint string
+	dialTimeout        time.Duration
+	handshakeTimeout   time.Duration
+	dialContext        func(context.Context, string, string) (net.Conn, error)
+	newClientConn      func(net.Conn, string, *ssh.ClientConfig) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error)
+	newSFTPClient      func() (sftpUploadClient, error)
+	runCommandFunc     func(context.Context, string) error
+}
+
+// SSHTransportOptions configures per-connection SSH transport behavior. Zero
+// values preserve the provider defaults.
+type SSHTransportOptions struct {
+	DialTimeout      time.Duration
+	HandshakeTimeout time.Duration
 }
 
 // NewSSHTransport creates a new SSH transport with the given configuration.
 func NewSSHTransport(config TransportConfig) *SSHTransport {
+	return NewSSHTransportWithOptions(config, SSHTransportOptions{})
+}
+
+// NewSSHTransportWithOptions creates a new SSH transport with custom timeout
+// settings.
+func NewSSHTransportWithOptions(config TransportConfig, options SSHTransportOptions) *SSHTransport {
 	return &SSHTransport{
 		config:           config,
-		dialTimeout:      defaultSSHDialTimeout,
-		handshakeTimeout: defaultSSHHandshakeTimeout,
+		dialTimeout:      normalizeSSHTimeout(options.DialTimeout, defaultSSHDialTimeout),
+		handshakeTimeout: normalizeSSHTimeout(options.HandshakeTimeout, defaultSSHHandshakeTimeout),
 	}
+}
+
+func normalizeSSHTimeout(value, defaultValue time.Duration) time.Duration {
+	if value <= 0 {
+		return defaultValue
+	}
+	return value
 }
 
 // Connect establishes an SSH connection to the target host using certificate
 // auth or SSH agent.
 func (t *SSHTransport) Connect(ctx context.Context) error {
+	t.hostKeyFingerprint = ""
+
 	authMethods, err := t.buildAuthMethods()
 	if err != nil {
 		return fmt.Errorf("ssh auth: %w", err)
@@ -120,6 +142,10 @@ func (t *SSHTransport) Connect(ctx context.Context) error {
 	return nil
 }
 
+func (t *SSHTransport) HostKeyFingerprint() string {
+	return strings.TrimSpace(t.hostKeyFingerprint)
+}
+
 func (t *SSHTransport) dial(ctx context.Context, addr string) (net.Conn, error) {
 	dialCtx, cancel := context.WithTimeout(ctx, t.dialTimeout)
 	defer cancel()
@@ -166,103 +192,46 @@ func (t *SSHTransport) applyHandshakeDeadline(ctx context.Context, conn net.Conn
 }
 
 func (t *SSHTransport) hostKeyCallback() (ssh.HostKeyCallback, error) {
-	knownHostsPath, err := resolveKnownHostsPath(strings.TrimSpace(t.config.SSHKnownHostsFile))
-	if err != nil {
-		return nil, err
+	store := t.config.SSHHostKeyTrust
+	if store == nil {
+		store = NewHostKeyTrustStore()
+		t.config.SSHHostKeyTrust = store
 	}
-	if err := ensureKnownHostsFile(knownHostsPath); err != nil {
+
+	if err := store.LoadKnownHostsFile(strings.TrimSpace(t.config.SSHKnownHostsFile)); err != nil {
 		return nil, err
 	}
 
-	callback, err := knownhosts.New(knownHostsPath)
-	if err != nil {
-		return nil, fmt.Errorf("parse known_hosts %s: %w", knownHostsPath, err)
-	}
+	targetAddress := t.resolveEndpoint()
+	expectedFingerprint := strings.TrimSpace(t.config.SSHHostKeyFingerprint)
 
 	return func(hostname string, remote net.Addr, key ssh.PublicKey) error {
-		err := callback(hostname, remote, key)
-		if err == nil {
-			return nil
+		fingerprint := hostKeyFingerprint(key)
+		t.hostKeyFingerprint = fingerprint
+
+		if store.IsRevokedFingerprint(fingerprint) {
+			return fmt.Errorf("ssh host verification: key is revoked for %s", describeHostVerificationTarget(hostname, remote, targetAddress))
 		}
 
-		var keyErr *knownhosts.KeyError
-		if errors.As(err, &keyErr) && len(keyErr.Want) == 0 {
-			if adoptErr := appendKnownHost(knownHostsPath, hostname, remote, key); adoptErr != nil {
-				return fmt.Errorf("adopt new host key in %s: %w", knownHostsPath, adoptErr)
+		addresses := knownHostAddresses(hostname, remote)
+		if strings.TrimSpace(targetAddress) != "" {
+			addresses = append(addresses, targetAddress)
+		}
+		trustedFingerprints := store.TrustedFingerprints(addresses)
+
+		if expectedFingerprint != "" && fingerprint != expectedFingerprint {
+			return fmt.Errorf("ssh host key fingerprint mismatch for %s: expected %s, got %s", describeHostVerificationTarget(hostname, remote, targetAddress), expectedFingerprint, fingerprint)
+		}
+
+		if len(trustedFingerprints) > 0 {
+			if _, ok := trustedFingerprints[fingerprint]; !ok {
+				return fmt.Errorf("ssh host key fingerprint mismatch for %s: expected one of %s, got %s", describeHostVerificationTarget(hostname, remote, targetAddress), formatTrustedFingerprints(trustedFingerprints), fingerprint)
 			}
-			return nil
 		}
 
-		return err
+		store.TrustFingerprintAliases(addresses, fingerprint)
+		return nil
 	}, nil
-}
-
-func resolveKnownHostsPath(configuredPath string) (string, error) {
-	if strings.TrimSpace(configuredPath) != "" {
-		return strings.TrimSpace(configuredPath), nil
-	}
-
-	homeDir, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(homeDir) == "" {
-		return "", fmt.Errorf("set ssh.known_hosts_file or provide a valid home directory for ~/.ssh/known_hosts")
-	}
-
-	return filepath.Join(homeDir, ".ssh", "known_hosts"), nil
-}
-
-func ensureKnownHostsFile(path string) error {
-	if strings.TrimSpace(path) == "" {
-		return fmt.Errorf("known_hosts path is empty")
-	}
-
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
-		return fmt.Errorf("create known_hosts directory for %s: %w", path, err)
-	}
-
-	file, err := os.OpenFile(path, os.O_RDONLY|os.O_CREATE, 0o600)
-	if err != nil {
-		return fmt.Errorf("open known_hosts %s: %w", path, err)
-	}
-	return file.Close()
-}
-
-func appendKnownHost(path, hostname string, remote net.Addr, key ssh.PublicKey) error {
-	addresses := knownHostAddresses(hostname, remote)
-	if len(addresses) == 0 {
-		return fmt.Errorf("no host address available for known_hosts entry")
-	}
-
-	line := strings.TrimSpace(knownhosts.Line(addresses, key))
-	if line == "" {
-		return fmt.Errorf("generated empty known_hosts line")
-	}
-
-	knownHostsFileMu.Lock()
-	defer knownHostsFileMu.Unlock()
-
-	if err := ensureKnownHostsFile(path); err != nil {
-		return err
-	}
-
-	existing, err := os.ReadFile(path)
-	if err == nil {
-		for _, existingLine := range strings.Split(string(existing), "\n") {
-			if strings.TrimSpace(existingLine) == line {
-				return nil
-			}
-		}
-	}
-
-	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0o600)
-	if err != nil {
-		return fmt.Errorf("append known_hosts %s: %w", path, err)
-	}
-	defer file.Close()
-
-	if _, err := fmt.Fprintln(file, line); err != nil {
-		return fmt.Errorf("write known_hosts %s: %w", path, err)
-	}
-	return nil
 }
 
 func knownHostAddresses(hostname string, remote net.Addr) []string {
@@ -286,6 +255,28 @@ func knownHostAddresses(hostname string, remote net.Addr) []string {
 	}
 
 	return addresses
+}
+
+func describeHostVerificationTarget(hostname string, remote net.Addr, targetAddress string) string {
+	for _, candidate := range []string{hostname, targetAddress} {
+		candidate = strings.TrimSpace(candidate)
+		if candidate != "" {
+			return candidate
+		}
+	}
+	if remote != nil {
+		return remote.String()
+	}
+	return "target"
+}
+
+func formatTrustedFingerprints(fingerprints map[string]struct{}) string {
+	values := make([]string, 0, len(fingerprints))
+	for fingerprint := range fingerprints {
+		values = append(values, fingerprint)
+	}
+	sort.Strings(values)
+	return strings.Join(values, ", ")
 }
 
 // PushFile writes data to a remote path, creating parent directories as needed.

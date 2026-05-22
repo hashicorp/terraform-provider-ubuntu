@@ -686,7 +686,7 @@ func freeGuestBuffer(ctx context.Context, mod api.Module, ptr uint32) error {
 		return nil
 	}
 
-	freeFn := mod.ExportedFunction("tf_nix_free")
+	freeFn := mod.ExportedFunction("tf_linux_provider_free")
 	if freeFn == nil {
 		freeFn = mod.ExportedFunction("free")
 	}

@@ -5,7 +5,7 @@ import "github.com/hashicorp/terraform-provider-ubuntu/guest/sdk"
 func RuleResourceSchema() pluginsdk.Schema {
 	return pluginsdk.Schema{
 		Attributes: map[string]pluginsdk.Attribute{
-			"name":                 {Type: pluginsdk.AttrString, Required: true, Description: "Stable tf-nix name used to tag and reconcile the managed UFW rule."},
+			"name":                 {Type: pluginsdk.AttrString, Required: true, Description: "Stable tf-linux-provider name used to tag and reconcile the managed UFW rule."},
 			"action":               {Type: pluginsdk.AttrString, Optional: true, Computed: true, Description: "UFW action: allow, deny, reject, or limit. Defaults to allow."},
 			"direction":            {Type: pluginsdk.AttrString, Optional: true, Computed: true, Description: "Traffic direction: in or out. Defaults to in."},
 			"from":                 {Type: pluginsdk.AttrString, Optional: true, Computed: true, Description: "Source CIDR, address, or the literal any. Defaults to any."},

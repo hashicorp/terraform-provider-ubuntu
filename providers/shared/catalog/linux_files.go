@@ -157,7 +157,7 @@ func LinuxFiles() Fragment {
 				LockPlanner:       crontabEntryLockPlanner,
 				ImportIdentity: joinedStringImportIdentity("/",
 					importIdentityField{Key: "user", Description: "User that owns the crontab entry to import."},
-					importIdentityField{Key: "name", Description: "Stable tf-nix name of the managed crontab entry to import."},
+					importIdentityField{Key: "name", Description: "Stable tf-linux-provider name of the managed crontab entry to import."},
 				),
 				ValidationPolicy: engine.ValidationPolicy{
 					RemotePlanValidation: false,

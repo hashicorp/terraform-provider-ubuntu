@@ -44,6 +44,7 @@ This resource exports the following attributes:
 
 - `fullchain_digest` (string) - Content digest of the managed fullchain PEM, including the algorithm tag.
 - `fullchain_path` (string) - Path of the managed fullchain PEM on the host.
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
 - `input_family` (string) - Resolved input family used to build this TLS identity: pem_fullchain, pem_split, der_fullchain, or der_split.
 - `issuer` (string) - Issuer of the leaf certificate.

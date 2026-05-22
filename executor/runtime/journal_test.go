@@ -14,7 +14,7 @@ import (
 )
 
 func TestOperationJournalAcquireReleaseEncryptsRecord(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", t.TempDir())
 	mustSetJournalKey(t, "0123456789abcdef0123456789abcdef")
 
 	journal := newOperationJournal()
@@ -58,7 +58,7 @@ func TestOperationJournalAcquireReleaseEncryptsRecord(t *testing.T) {
 }
 
 func TestOperationJournalPurgesUnreadableStaleEntry(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", t.TempDir())
 	journal := newOperationJournal()
 	hostKey := "ssh:host-b"
 	staleID := "stale-op"
@@ -126,7 +126,7 @@ func TestOperationJournalPurgesUnreadableStaleEntry(t *testing.T) {
 }
 
 func TestOperationJournalAcquireReusesRequestIDForRunningLease(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", t.TempDir())
 	mustSetJournalKey(t, "cccccccccccccccccccccccccccccccc")
 
 	journal := newOperationJournal()
@@ -175,7 +175,7 @@ func TestOperationJournalAcquireReusesRequestIDForRunningLease(t *testing.T) {
 }
 
 func TestOperationJournalAcquireAbandonsDifferentBootID(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", t.TempDir())
 	mustSetJournalKey(t, "dddddddddddddddddddddddddddddddd")
 
 	originalBootID := operationJournalBootID
@@ -247,7 +247,7 @@ func TestOperationJournalAcquireAbandonsDifferentBootID(t *testing.T) {
 }
 
 func TestRebootJournalEncryptsRecords(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", t.TempDir())
 	mustSetJournalKey(t, "fedcba9876543210fedcba9876543210")
 
 	journal := newRebootJournal()
@@ -305,34 +305,34 @@ func TestSharedJournalLockAcceptsReadOnlyFile(t *testing.T) {
 }
 
 func TestDefaultExecutorJournalBaseDirUsesXDGStateHome(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", "")
-	t.Setenv("XDG_STATE_HOME", "/tmp/tf-nix-state")
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", "")
+	t.Setenv("XDG_STATE_HOME", "/tmp/tf-linux-provider-state")
 	t.Setenv("HOME", "/tmp/ignored-home")
 
 	got := defaultExecutorJournalBaseDir()
-	want := filepath.Join("/tmp/tf-nix-state", "tf-nix", "journals")
+	want := filepath.Join("/tmp/tf-linux-provider-state", "tf-linux-provider", "journals")
 	if got != want {
 		t.Fatalf("expected XDG journal dir %q, got %q", want, got)
 	}
 }
 
 func TestDefaultExecutorJournalBaseDirUsesHomeStateDir(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", "")
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", "")
 	t.Setenv("XDG_STATE_HOME", "")
-	t.Setenv("HOME", "/tmp/tf-nix-home")
+	t.Setenv("HOME", "/tmp/tf-linux-provider-home")
 
 	got := defaultExecutorJournalBaseDir()
-	want := filepath.Join("/tmp/tf-nix-home", ".local", "state", "tf-nix", "journals")
+	want := filepath.Join("/tmp/tf-linux-provider-home", ".local", "state", "tf-linux-provider", "journals")
 	if got != want {
 		t.Fatalf("expected HOME journal dir %q, got %q", want, got)
 	}
 }
 
 func TestDefaultRestartJournalDirUsesOverride(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_ACTIONS_DIR", "/tmp/tf-nix-actions")
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_ACTIONS_DIR", "/tmp/tf-linux-provider-actions")
 
 	got := defaultRestartJournalDir()
-	if got != "/tmp/tf-nix-actions" {
+	if got != "/tmp/tf-linux-provider-actions" {
 		t.Fatalf("expected override restart journal dir, got %q", got)
 	}
 }
@@ -364,7 +364,7 @@ func TestNormalizeRestartCommandSpecFallsBackToShellForCommandString(t *testing.
 }
 
 func TestPrepareRestartOperationHandlesExistingStatuses(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_ACTIONS_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_ACTIONS_DIR", t.TempDir())
 	mustSetJournalKey(t, "11111111111111111111111111111111")
 
 	spec := &restartCommandSpec{Name: "systemctl", Args: []string{"restart", "sshd.service"}}
@@ -434,7 +434,7 @@ func TestPrepareRestartOperationHandlesExistingStatuses(t *testing.T) {
 }
 
 func TestWaitForRestartResultHandlesTerminalAndCanceledStates(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_ACTIONS_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_ACTIONS_DIR", t.TempDir())
 	mustSetJournalKey(t, "22222222222222222222222222222222")
 
 	completed := &restartOperationRecord{
@@ -485,7 +485,7 @@ func TestWaitForRestartResultHandlesTerminalAndCanceledStates(t *testing.T) {
 }
 
 func TestStartRestartHelperRequiresConfiguredJournalKey(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_ACTIONS_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_ACTIONS_DIR", t.TempDir())
 	savedKey := snapshotRuntimeJournalKey()
 	t.Cleanup(func() {
 		restoreRuntimeJournalKey(savedKey)
@@ -499,7 +499,7 @@ func TestStartRestartHelperRequiresConfiguredJournalKey(t *testing.T) {
 }
 
 func TestRunJournaledRestartLegacyAndErrorPaths(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_ACTIONS_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_ACTIONS_DIR", t.TempDir())
 	mustSetJournalKey(t, "33333333333333333333333333333333")
 	encodedKey, err := runtimeJournalKeyEnv()
 	if err != nil {
@@ -553,7 +553,7 @@ func TestRunJournaledRestartLegacyAndErrorPaths(t *testing.T) {
 }
 
 func TestRebootJournalMarkPhaseAndFailedUpdateCurrentEntry(t *testing.T) {
-	t.Setenv("TF_NIX_EXECUTOR_JOURNAL_DIR", t.TempDir())
+	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", t.TempDir())
 	mustSetJournalKey(t, "44444444444444444444444444444444")
 
 	journal := newRebootJournal()

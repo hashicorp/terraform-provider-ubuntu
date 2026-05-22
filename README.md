@@ -183,7 +183,6 @@ Terraform plans and runs only that action when `-invoke` is set, which keeps reb
 
 - Read [docs/index.md](docs/index.md) for the provider docs.
 - Use the examples above as a starting point for your first configuration.
-- Review [RELEASE_NOTES.md](RELEASE_NOTES.md) for the staged release notes that accompany this version.
 
 ## Build
 
@@ -207,4 +206,3 @@ terraform {
 ## Contents
 
 - Provider documentation: [docs/](docs/)
-- Staged release notes: [RELEASE_NOTES.md](RELEASE_NOTES.md)

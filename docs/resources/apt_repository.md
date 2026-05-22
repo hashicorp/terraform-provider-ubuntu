@@ -44,6 +44,7 @@ The resource supports the following arguments:
 This resource exports the following attributes:
 
 - `file_path` (string) - Path to the managed sources.list.d file.
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
 - `source_line` (string) - Rendered deb source line.
 

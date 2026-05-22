@@ -71,7 +71,7 @@ func sysctlEntryLockPlanner(action string, op *hostsession.OperationMessage) ([]
 func networkStackLockPlanner(action string, _ *hostsession.OperationMessage) ([]hostsession.LockDescriptor, error) {
 	mode := engine.LockModeForAction(action)
 	return []hostsession.LockDescriptor{
-		{Key: "path:/etc/sysctl.d/90-tf-nix-network-stack.conf", Mode: mode, Source: "network stack resource"},
+		{Key: "path:/etc/sysctl.d/90-tf-linux-provider-network-stack.conf", Mode: mode, Source: "network stack resource"},
 		{Key: "network:stack", Mode: mode, Source: "network stack resource"},
 		{Key: "sysctl:net.ipv4.ip_forward", Mode: mode, Source: "network stack resource"},
 		{Key: "sysctl:net.ipv6.conf.all.forwarding", Mode: mode, Source: "network stack resource"},
@@ -234,6 +234,25 @@ func timezoneLockPlanner(action string, _ *hostsession.OperationMessage) ([]host
 		Mode:   engine.LockModeForAction(action),
 		Source: "timezone resource",
 	}}, nil
+}
+
+func timesyncdLockPlanner(action string, _ *hostsession.OperationMessage) ([]hostsession.LockDescriptor, error) {
+	mode := engine.LockModeForAction(action)
+	return []hostsession.LockDescriptor{
+		{Key: "time:timesync", Mode: mode, Source: "timesync resource"},
+		{Key: "path:/etc/systemd/timesyncd.conf.d/90-tf-linux-provider-timesync.conf", Mode: mode, Source: "timesync resource"},
+		{Key: "service:systemd-timesyncd", Mode: mode, Source: "timesync resource"},
+	}, nil
+}
+
+func chronyTimesyncLockPlanner(action string, _ *hostsession.OperationMessage) ([]hostsession.LockDescriptor, error) {
+	mode := engine.LockModeForAction(action)
+	return []hostsession.LockDescriptor{
+		{Key: "time:timesync", Mode: mode, Source: "timesync resource"},
+		{Key: "path:/etc/chrony.conf", Mode: mode, Source: "timesync resource"},
+		{Key: "path:/etc/chrony.d/90-tf-linux-provider-timesync.conf", Mode: mode, Source: "timesync resource"},
+		{Key: "service:chronyd", Mode: mode, Source: "timesync resource"},
+	}, nil
 }
 
 func aptRepositoryLockPlanner(action string, op *hostsession.OperationMessage) ([]hostsession.LockDescriptor, error) {

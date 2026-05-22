@@ -37,6 +37,7 @@ The resource supports the following arguments:
 This resource exports the following attributes:
 
 - `completed_at` (string) - Completion timestamp for the last successful reboot barrier execution.
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Stable reboot barrier identifier derived from host and reason.
 - `last_error` (string) - Last persisted reboot failure detail, if any.
 - `operation_id` (string) - Provider-side reboot operation identifier.

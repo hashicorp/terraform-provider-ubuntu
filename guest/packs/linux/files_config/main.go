@@ -20,12 +20,12 @@ const sshdConfigPath = "/etc/ssh/sshd_config"
 
 const (
 	sysctlConfigPath       = "/etc/sysctl.conf"
-	networkStackConfigPath = "/etc/sysctl.d/90-tf-nix-network-stack.conf"
+	networkStackConfigPath = "/etc/sysctl.d/90-tf-linux-provider-network-stack.conf"
 	fstabConfigPath        = "/etc/fstab"
 	swapInfoPath           = "/proc/swaps"
 )
 
-const swapDisabledCommentPrefix = "# tf-nix swap disabled: "
+const swapDisabledCommentPrefix = "# tf-linux-provider swap disabled: "
 
 const (
 	dirPort                   = "Port"
@@ -1045,7 +1045,7 @@ func applyNetworkStack(plan pluginsdk.StateData) (pluginsdk.StateData, error) {
 
 	values := networkStackManagedValues(plan)
 	entries := make([]keyValueLine, 0, len(networkStackKeySpecs)+1)
-	entries = append(entries, keyValueLine{Comment: true, Raw: "# managed by tf-nix network_stack"})
+	entries = append(entries, keyValueLine{Comment: true, Raw: "# managed by tf-linux-provider network_stack"})
 	for _, spec := range networkStackKeySpecs {
 		entries = append(entries, keyValueLine{Key: spec.Key, Value: values[spec.Key]})
 	}
@@ -2108,7 +2108,7 @@ func runFileValidation(validation *fileValidationSpec, path string) error {
 func fileValidationTempPath(path, kind string) string {
 	dir := filepath.Dir(path)
 	base := filepath.Base(path)
-	return filepath.Join(dir, fmt.Sprintf(".%s.tf-nix-%s-%d", base, kind, time.Now().UnixNano()))
+	return filepath.Join(dir, fmt.Sprintf(".%s.tf-linux-provider-%s-%d", base, kind, time.Now().UnixNano()))
 }
 
 func moveManagedFilePath(from, to string) error {

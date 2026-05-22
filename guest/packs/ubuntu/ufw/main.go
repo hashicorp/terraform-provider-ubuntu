@@ -11,7 +11,7 @@ import (
 	ubuntuufwcontract "github.com/hashicorp/terraform-provider-ubuntu/guest/sdk/contracts/ubuntuufw"
 )
 
-const ufwManagedCommentPrefix = "tf-nix:name="
+const ufwManagedCommentPrefix = "tf-linux-provider:name="
 
 var (
 	ufwNamePattern   = regexp.MustCompile(`^[a-zA-Z0-9][a-zA-Z0-9._-]*$`)

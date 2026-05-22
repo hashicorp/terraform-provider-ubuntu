@@ -36,6 +36,7 @@ This resource exports the following attributes:
 
 - `cert_path` (string) - Path of the managed trust-anchor PEM file.
 - `digest` (string) - Content digest of the managed normalized certificate PEM, including the algorithm tag.
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
 - `issuer` (string) - Parsed certificate issuer.
 - `subject` (string) - Parsed certificate subject.

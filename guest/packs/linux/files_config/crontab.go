@@ -10,7 +10,7 @@ import (
 	"github.com/hashicorp/terraform-provider-ubuntu/guest/sdk/hostfs"
 )
 
-const crontabManagedMarkerPrefix = "# tf-nix: crontab_entry name="
+const crontabManagedMarkerPrefix = "# tf-linux-provider: crontab_entry name="
 
 type crontabEntryResource struct{}
 
@@ -601,7 +601,7 @@ func writeUserCrontabLines(user string, lines []pluginsdk.CrontabLine) error {
 		return removeUserCrontab(user)
 	}
 
-	tmpPath, err := hostfs.WriteTempFile("tf-nix-crontab-"+sanitizeCrontabTempToken(user), "", content, 0o600)
+	tmpPath, err := hostfs.WriteTempFile("tf-linux-provider-crontab-"+sanitizeCrontabTempToken(user), "", content, 0o600)
 	if err != nil {
 		return fmt.Errorf("write temp crontab for %q: %w", user, err)
 	}

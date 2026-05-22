@@ -34,23 +34,24 @@ type RebootBarrierResource struct {
 }
 
 type rebootBarrierModel struct {
-	ID             types.String `tfsdk:"id"`
-	Reason         types.String `tfsdk:"reason"`
-	Triggers       types.Map    `tfsdk:"triggers"`
-	TimeoutSeconds types.Int64  `tfsdk:"timeout_seconds"`
-	SettleSeconds  types.Int64  `tfsdk:"settle_seconds"`
-	RebootCommand  types.String `tfsdk:"reboot_command"`
-	Phase          types.String `tfsdk:"phase"`
-	OperationID    types.String `tfsdk:"operation_id"`
-	StableHostID   types.String `tfsdk:"stable_host_id"`
-	PreBootID      types.String `tfsdk:"pre_boot_id"`
-	PostBootID     types.String `tfsdk:"post_boot_id"`
-	TriggersHash   types.String `tfsdk:"triggers_hash"`
-	CompletedAt    types.String `tfsdk:"completed_at"`
-	LastError      types.String `tfsdk:"last_error"`
-	Target         types.String `tfsdk:"target"`
-	Port           types.Int64  `tfsdk:"port"`
-	Transport      types.String `tfsdk:"transport"`
+	ID                 types.String `tfsdk:"id"`
+	Reason             types.String `tfsdk:"reason"`
+	Triggers           types.Map    `tfsdk:"triggers"`
+	TimeoutSeconds     types.Int64  `tfsdk:"timeout_seconds"`
+	SettleSeconds      types.Int64  `tfsdk:"settle_seconds"`
+	RebootCommand      types.String `tfsdk:"reboot_command"`
+	Phase              types.String `tfsdk:"phase"`
+	OperationID        types.String `tfsdk:"operation_id"`
+	StableHostID       types.String `tfsdk:"stable_host_id"`
+	PreBootID          types.String `tfsdk:"pre_boot_id"`
+	PostBootID         types.String `tfsdk:"post_boot_id"`
+	TriggersHash       types.String `tfsdk:"triggers_hash"`
+	CompletedAt        types.String `tfsdk:"completed_at"`
+	LastError          types.String `tfsdk:"last_error"`
+	Target             types.String `tfsdk:"target"`
+	Port               types.Int64  `tfsdk:"port"`
+	Transport          types.String `tfsdk:"transport"`
+	HostKeyFingerprint types.String `tfsdk:"host_key_fingerprint"`
 }
 
 func NewRebootBarrierResource(typeName string) *RebootBarrierResource {
@@ -129,9 +130,10 @@ func (r *RebootBarrierResource) Schema(_ context.Context, _ resource.SchemaReque
 				Description: "Last persisted reboot failure detail, if any.",
 				Computed:    true,
 			},
-			targetAttributeName:    commonResourceTargetAttribute(),
-			portAttributeName:      commonResourcePortAttribute(),
-			transportAttributeName: commonResourceTransportAttribute(),
+			targetAttributeName:             commonResourceTargetAttribute(),
+			portAttributeName:               commonResourcePortAttribute(),
+			transportAttributeName:          commonResourceTransportAttribute(),
+			hostKeyFingerprintAttributeName: commonResourceHostKeyFingerprintAttribute(),
 		},
 	}
 }
@@ -204,6 +206,7 @@ func (r *RebootBarrierResource) Read(ctx context.Context, req resource.ReadReque
 			resp.Diagnostics.AddError("Invalid host configuration", hostErr.Error())
 			return
 		}
+		hostConfig = applyPinnedHostKeyFingerprint(hostConfig, state.HostKeyFingerprint)
 
 		session, err := r.pool.GetOrCreate(ctx, hostConfig)
 		if err != nil {
@@ -224,6 +227,8 @@ func (r *RebootBarrierResource) Read(ctx context.Context, req resource.ReadReque
 			)
 			return
 		}
+
+		state.HostKeyFingerprint = observedHostKeyFingerprintValue(r.pool, hostConfig, state.HostKeyFingerprint)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &state)...)
@@ -239,6 +244,7 @@ func (r *RebootBarrierResource) Delete(ctx context.Context, req resource.DeleteR
 	if r.executorMgr != nil && r.pool != nil {
 		hostConfig, hostErr := r.buildTransportConfig(state.Target, state.Port, state.Transport)
 		if hostErr == nil {
+			hostConfig = applyPinnedHostKeyFingerprint(hostConfig, state.HostKeyFingerprint)
 			session, err := r.pool.GetOrCreate(ctx, hostConfig)
 			if err == nil {
 				if cleanupErr := r.executorMgr.CleanupRebootArtifacts(ctx, session, strings.TrimSpace(state.OperationID.ValueString())); cleanupErr != nil {
@@ -268,6 +274,14 @@ func (r *RebootBarrierResource) applyPlan(
 		diags.AddError("Invalid host configuration", hostErr.Error())
 		return
 	}
+	fingerprintFallback := nullHostKeyFingerprint()
+	if prior != nil {
+		priorHostConfig, err := r.buildTransportConfig(prior.Target, prior.Port, prior.Transport)
+		if err == nil && sameTransportEndpoint(priorHostConfig, hostConfig) {
+			hostConfig = applyPinnedHostKeyFingerprint(hostConfig, prior.HostKeyFingerprint)
+			fingerprintFallback = normalizeHostKeyFingerprintValue(prior.HostKeyFingerprint)
+		}
+	}
 
 	triggerValues, triggerErr := rebootBarrierTriggerValues(ctx, plan.Triggers)
 	if triggerErr != nil {
@@ -285,6 +299,7 @@ func (r *RebootBarrierResource) applyPlan(
 	updatedState := plan
 	updatedState.ID = types.StringValue(resourceID)
 	updatedState.TriggersHash = types.StringValue(triggersDigest)
+	updatedState.HostKeyFingerprint = fingerprintFallback
 
 	if shouldSkipRebootBarrier(prior, resourceID, triggersDigest) {
 		updatedState = copyRebootBarrierExecutionState(updatedState, *prior)
@@ -309,6 +324,7 @@ func (r *RebootBarrierResource) applyPlan(
 	if result != nil {
 		updatedState = applyRebootBarrierResult(updatedState, result)
 	}
+	updatedState.HostKeyFingerprint = observedHostKeyFingerprintValue(r.pool, hostConfig, fingerprintFallback)
 
 	if err != nil {
 		diags.AddError("Reboot barrier failed", err.Error())
@@ -381,6 +397,7 @@ func copyRebootBarrierExecutionState(dst, src rebootBarrierModel) rebootBarrierM
 	dst.PostBootID = src.PostBootID
 	dst.CompletedAt = src.CompletedAt
 	dst.LastError = src.LastError
+	dst.HostKeyFingerprint = normalizeHostKeyFingerprintValue(src.HostKeyFingerprint)
 	return dst
 }
 

@@ -1,0 +1,198 @@
+name: build
+
+on: [workflow_dispatch, push]
+
+permissions:
+  contents: read
+
+env:
+  PKG_NAME: "terraform-provider-ubuntu"
+  PROVIDER_NAME: "ubuntu"
+  TINYGO_VERSION: "0.41.1"
+  WASM_OPT_FLAGS: "-Oz"
+
+jobs:
+  get-go-version:
+    name: "Detect Go toolchain version"
+    runs-on: ubuntu-latest
+    outputs:
+      go-version: ${{ steps.get-go-version.outputs.go-version }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+      - name: Detect Go version
+        id: get-go-version
+        run: |
+          version="$(go list -f {{.GoVersion}} -m)"
+          echo "go-version=$version" >> "$GITHUB_OUTPUT"
+
+  set-product-version:
+    name: "Parse version file"
+    runs-on: ubuntu-latest
+    outputs:
+      product-version: ${{ steps.set-product-version.outputs.product-version }}
+      product-base-version: ${{ steps.set-product-version.outputs.base-product-version }}
+      product-prerelease-version: ${{ steps.set-product-version.outputs.prerelease-product-version }}
+      product-minor-version: ${{ steps.set-product-version.outputs.minor-product-version }}
+    steps:
+      - name: Set variables
+        id: set-product-version
+        uses: hashicorp/actions-set-product-version@v2
+
+  generate-metadata-file:
+    needs: set-product-version
+    runs-on: ubuntu-latest
+    outputs:
+      filepath: ${{ steps.generate-metadata-file.outputs.filepath }}
+    steps:
+      - name: "Checkout directory"
+        uses: actions/checkout@v6
+      - name: Generate metadata file
+        id: generate-metadata-file
+        uses: hashicorp/actions-generate-metadata@v1
+        with:
+          version: ${{ needs.set-product-version.outputs.product-version }}
+          product: ${{ env.PKG_NAME }}
+          repositoryOwner: "hashicorp"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: metadata.json
+          path: ${{ steps.generate-metadata-file.outputs.filepath }}
+
+  upload-terraform-registry-manifest-artifact:
+    needs: set-product-version
+    runs-on: ubuntu-latest
+    steps:
+      - name: "Checkout directory"
+        uses: actions/checkout@v6
+        with:
+          path: ${{ env.PKG_NAME }}
+      - name: "Copy manifest from checkout directory to a file with the desired name"
+        id: terraform-registry-manifest
+        run: |
+          name="${{ env.PKG_NAME }}"
+          version="${{ needs.set-product-version.outputs.product-version }}"
+
+          source="${name}/terraform-registry-manifest.json"
+          destination="${name}_${version}_manifest.json"
+
+          cp "$source" "$destination"
+          echo "filename=$destination" >> "$GITHUB_OUTPUT"
+      - uses: actions/upload-artifact@v7
+        with:
+          name: terraform-registry-manifest.json
+          path: ${{ steps.terraform-registry-manifest.outputs.filename }}
+          if-no-files-found: error
+
+  runtime-assets:
+    needs: get-go-version
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v6
+        with:
+          go-version: ${{ needs.get-go-version.outputs.go-version }}
+          cache-dependency-path: |
+            **/go.sum
+      - name: Setup TinyGo
+        uses: acifani/setup-tinygo@v3
+        with:
+          tinygo-version: ${{ env.TINYGO_VERSION }}
+      - name: Setup Binaryen
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y binaryen
+      - name: Build runtime plugins
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          while IFS='=' read -r plugin_dir output_name; do
+            if [[ -z "$plugin_dir" ]]; then
+              continue
+            fi
+            tinygo build -buildmode=c-shared -o "dist/$output_name" -target=wasi "$plugin_dir"
+            wasm-opt "$WASM_OPT_FLAGS" "dist/$output_name" -o "dist/$output_name"
+          done <<'SPECS'
+          ./guest/packs/debian/apt_repository=debian_apt.wasm
+          ./guest/packs/debian/trusted_cert=debian_trust.wasm
+          ./guest/packs/linux/commands=linux_commands.wasm
+          ./guest/packs/linux/facts=linux_facts.wasm
+          ./guest/packs/linux/files_config=linux_files.wasm
+          ./guest/packs/linux/identity=linux_identity.wasm
+          ./guest/packs/linux/packages=linux_packages.wasm
+          ./guest/packs/linux/tls_identity=linux_tls.wasm
+          ./guest/packs/systemd/services=systemd_units.wasm
+          ./guest/packs/ubuntu/ufw=ubuntu_ufw.wasm
+          SPECS
+      - name: Build scoped executor assets
+        run: |
+          set -euo pipefail
+          go run ./build/diagnostics/scopedexecutor/run -dist dist -root . -providers "$PROVIDER_NAME"
+      - name: Stage embedded runtime assets
+        run: |
+          set -euo pipefail
+          go run ./build/embed/run -dist dist -root . -providers "$PROVIDER_NAME"
+      - name: Verify embedded runtime assets
+        run: |
+          set -euo pipefail
+          go test ./generated/providers/"$PROVIDER_NAME"/runtimeassets
+      - uses: actions/upload-artifact@v7
+        with:
+          name: runtime-assets-${{ env.PROVIDER_NAME }}
+          path: generated/providers/${{ env.PROVIDER_NAME }}/runtimeassets/embeddata
+          if-no-files-found: error
+
+  build:
+    needs:
+      - get-go-version
+      - set-product-version
+      - runtime-assets
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: true
+      matrix:
+        include:
+          - goos: linux
+            goarch: amd64
+          - goos: linux
+            goarch: arm64
+          - goos: darwin
+            goarch: amd64
+          - goos: darwin
+            goarch: arm64
+          - goos: windows
+            goarch: amd64
+          - goos: windows
+            goarch: arm64
+    name: Go ${{ needs.get-go-version.outputs.go-version }} ${{ matrix.goos }} ${{ matrix.goarch }} build
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v8
+        with:
+          name: runtime-assets-${{ env.PROVIDER_NAME }}
+          path: generated/providers/${{ env.PROVIDER_NAME }}/runtimeassets/embeddata
+      - uses: hashicorp/actions-go-build@v1
+        env:
+          CGO_ENABLED: 0
+          BASE_VERSION: ${{ needs.set-product-version.outputs.product-base-version }}
+          PRERELEASE_VERSION: ${{ needs.set-product-version.outputs.product-prerelease-version }}
+          METADATA_VERSION: ${{ env.METADATA }}
+        with:
+          bin_name: "${{ env.PKG_NAME }}_v${{ needs.set-product-version.outputs.product-version }}_x5"
+          product_name: ${{ env.PKG_NAME }}
+          product_version: ${{ needs.set-product-version.outputs.product-version }}
+          go_version: ${{ needs.get-go-version.outputs.go-version }}
+          os: ${{ matrix.goos }}
+          arch: ${{ matrix.goarch }}
+          reproducible: nope
+          clean: false
+          instructions: |
+            go build \
+              -o "$BIN_PATH" \
+              -trimpath \
+              -buildvcs=false \
+              -ldflags "-s -w -X main.version=${{ needs.set-product-version.outputs.product-version }} -X main.commit=${{ github.sha }}"
+            cp LICENSE "$TARGET_DIR/LICENSE.txt"

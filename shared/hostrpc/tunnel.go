@@ -401,13 +401,13 @@ func unmarshalHandshakeMessage(payload []byte) (tunnelMessage, error) {
 
 func deriveTunnelSecrets(sharedSecret, transcriptDigest []byte) (*tunnelSecrets, error) {
 	material := append(append([]byte(nil), sharedSecret...), transcriptDigest...)
-	masterSecret := deriveTunnelBytes(material, "tf-nix 2026-05 tunnel master", 32)
-	clientKey := deriveTunnelBytes(masterSecret, "tf-nix 2026-05 tunnel client key", 32)
-	serverKey := deriveTunnelBytes(masterSecret, "tf-nix 2026-05 tunnel server key", 32)
-	clientNonceSeed := deriveTunnelBytes(masterSecret, "tf-nix 2026-05 tunnel client nonce", 12)
-	serverNonceSeed := deriveTunnelBytes(masterSecret, "tf-nix 2026-05 tunnel server nonce", 12)
-	clientFinishKey := deriveTunnelBytes(masterSecret, "tf-nix 2026-05 tunnel client finish", 32)
-	serverFinishKey := deriveTunnelBytes(masterSecret, "tf-nix 2026-05 tunnel server finish", 32)
+	masterSecret := deriveTunnelBytes(material, "tf-linux-provider 2026-05 tunnel master", 32)
+	clientKey := deriveTunnelBytes(masterSecret, "tf-linux-provider 2026-05 tunnel client key", 32)
+	serverKey := deriveTunnelBytes(masterSecret, "tf-linux-provider 2026-05 tunnel server key", 32)
+	clientNonceSeed := deriveTunnelBytes(masterSecret, "tf-linux-provider 2026-05 tunnel client nonce", 12)
+	serverNonceSeed := deriveTunnelBytes(masterSecret, "tf-linux-provider 2026-05 tunnel server nonce", 12)
+	clientFinishKey := deriveTunnelBytes(masterSecret, "tf-linux-provider 2026-05 tunnel client finish", 32)
+	serverFinishKey := deriveTunnelBytes(masterSecret, "tf-linux-provider 2026-05 tunnel server finish", 32)
 	return &tunnelSecrets{
 		clientKey:        clientKey,
 		serverKey:        serverKey,

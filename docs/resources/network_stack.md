@@ -34,6 +34,7 @@ The resource supports the following arguments:
 This resource exports the following attributes:
 
 - `config_path` (string) - Managed sysctl.d file path owned by the network stack resource.
+- `host_key_fingerprint` (string) - Observed SSH host key fingerprint for this resource target. The provider records the first accepted fingerprint and rejects unexpected changes when reconnecting to the same target.
 - `id` (string) - Unique identifier for this resource.
 - `sysctls` (map(string)) - Underlying sysctl keys and values managed by this network stack resource.
 

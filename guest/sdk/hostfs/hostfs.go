@@ -62,7 +62,7 @@ func RemoveIfExists(path string) (bool, error) {
 func TempPath(prefix, suffix string) string {
 	prefix = sanitizeTempToken(prefix)
 	if prefix == "" {
-		prefix = "tf-nix"
+		prefix = "tf-linux-provider"
 	}
 	return filepath.Join("/tmp", fmt.Sprintf("%s-%d%s", prefix, time.Now().UnixNano(), suffix))
 }

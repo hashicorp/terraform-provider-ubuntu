@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	actionschema "github.com/hashicorp/terraform-plugin-framework/action/schema"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -22,6 +23,23 @@ func nullTransportTarget() types.String { return types.StringNull() }
 func nullTransportPort() types.Int64 { return types.Int64Null() }
 
 func nullTransportName() types.String { return types.StringNull() }
+
+func nullHostKeyFingerprint() types.String { return types.StringNull() }
+
+func hostKeyFingerprintStateValue(fingerprint string) types.String {
+	fingerprint = strings.TrimSpace(fingerprint)
+	if fingerprint == "" {
+		return types.StringNull()
+	}
+	return types.StringValue(fingerprint)
+}
+
+func normalizeHostKeyFingerprintValue(value types.String) types.String {
+	if value.IsNull() || value.IsUnknown() {
+		return types.StringNull()
+	}
+	return hostKeyFingerprintStateValue(value.ValueString())
+}
 
 func transportStateValuesFromConfig(config transport.TransportConfig) (types.String, types.Int64, types.String) {
 	target := types.StringNull()
@@ -902,6 +920,34 @@ func preserveHostFromStateWithNames(ctx context.Context, source *tfsdk.State, st
 	}
 
 	return setTransportStateAttributesWithNames(ctx, state, target, port, transportName, names)
+}
+
+func hostKeyFingerprintFromStateWithNames(ctx context.Context, state *tfsdk.State, names transportAttributeNames) (types.String, diag.Diagnostics) {
+	if state == nil || !resourceSchemaHasAttribute(state.Schema, names.hostKeyFingerprint) {
+		return nullHostKeyFingerprint(), nil
+	}
+
+	value := nullHostKeyFingerprint()
+	diagnostics := state.GetAttribute(ctx, path.Root(names.hostKeyFingerprint), &value)
+	if diagnostics.HasError() {
+		return nullHostKeyFingerprint(), diagnostics
+	}
+	return normalizeHostKeyFingerprintValue(value), diagnostics
+}
+
+func setHostKeyFingerprintStateAttributeWithNames(ctx context.Context, state *tfsdk.State, fingerprint types.String, names transportAttributeNames) diag.Diagnostics {
+	if state == nil || !resourceSchemaHasAttribute(state.Schema, names.hostKeyFingerprint) {
+		return nil
+	}
+	return state.SetAttribute(ctx, path.Root(names.hostKeyFingerprint), normalizeHostKeyFingerprintValue(fingerprint))
+}
+
+func preserveHostKeyFingerprintFromStateWithNames(ctx context.Context, source *tfsdk.State, state *tfsdk.State, names transportAttributeNames) diag.Diagnostics {
+	fingerprint, diagnostics := hostKeyFingerprintFromStateWithNames(ctx, source, names)
+	if diagnostics.HasError() {
+		return diagnostics
+	}
+	return setHostKeyFingerprintStateAttributeWithNames(ctx, state, fingerprint, names)
 }
 
 func preserveAllowDestructiveDestroyFromPlan(ctx context.Context, plan *tfsdk.Plan, state *tfsdk.State) diag.Diagnostics {

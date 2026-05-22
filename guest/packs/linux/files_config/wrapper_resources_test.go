@@ -595,12 +595,12 @@ func TestAdditionalWrapperPaths(t *testing.T) {
 
 		state, err := (&hostsEntryResource{}).Update(
 			pluginsdk.StateData{"ip": "10.0.0.10", "hostname": "app.internal"},
-			pluginsdk.StateData{"aliases": []string{"api.internal"}, "comment": "managed by tf-nix"},
+			pluginsdk.StateData{"aliases": []string{"api.internal"}, "comment": "managed by tf-linux-provider"},
 		)
 		if err != nil {
 			t.Fatalf("Update() error = %v, want nil", err)
 		}
-		if !strings.Contains(written, "api.internal") || !strings.Contains(written, "managed by tf-nix") {
+		if !strings.Contains(written, "api.internal") || !strings.Contains(written, "managed by tf-linux-provider") {
 			t.Fatalf("unexpected /etc/hosts contents after update: %q", written)
 		}
 		if got := state.GetStringList("aliases"); !reflect.DeepEqual(got, []string{"api.internal"}) {

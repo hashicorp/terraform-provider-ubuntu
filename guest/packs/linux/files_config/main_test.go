@@ -131,7 +131,7 @@ func TestNetworkStackUpdateWritesDedicatedConfigAndAppliesManagedSysctls(t *test
 	if wrotePath != networkStackConfigPath {
 		t.Fatalf("unexpected write path %q", wrotePath)
 	}
-	expectedContent := "# managed by tf-nix network_stack\nnet.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=0\nnet.ipv6.conf.default.forwarding=0\nnet.bridge.bridge-nf-call-iptables=1\nnet.bridge.bridge-nf-call-ip6tables=1\n"
+	expectedContent := "# managed by tf-linux-provider network_stack\nnet.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=0\nnet.ipv6.conf.default.forwarding=0\nnet.bridge.bridge-nf-call-iptables=1\nnet.bridge.bridge-nf-call-ip6tables=1\n"
 	if string(wroteData) != expectedContent {
 		t.Fatalf("unexpected network stack config:\n%s", string(wroteData))
 	}
@@ -166,7 +166,7 @@ func TestNetworkStackReadParsesManagedFile(t *testing.T) {
 		if path != networkStackConfigPath {
 			t.Fatalf("unexpected read path %q", path)
 		}
-		return []byte("# managed by tf-nix network_stack\nnet.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\nnet.ipv6.conf.default.forwarding=1\nnet.bridge.bridge-nf-call-iptables=0\nnet.bridge.bridge-nf-call-ip6tables=1\n"), nil
+		return []byte("# managed by tf-linux-provider network_stack\nnet.ipv4.ip_forward=1\nnet.ipv6.conf.all.forwarding=1\nnet.ipv6.conf.default.forwarding=1\nnet.bridge.bridge-nf-call-iptables=0\nnet.bridge.bridge-nf-call-ip6tables=1\n"), nil
 	}
 
 	state, err := (&networkStackResource{}).Read(nil)
@@ -199,11 +199,11 @@ func TestNormalizeHostAliases(t *testing.T) {
 func TestHostsCommentRoundTripHelpers(t *testing.T) {
 	t.Parallel()
 
-	serialized := serializeHostsComment("managed by tf-nix")
-	if serialized != "# managed by tf-nix" {
+	serialized := serializeHostsComment("managed by tf-linux-provider")
+	if serialized != "# managed by tf-linux-provider" {
 		t.Fatalf("unexpected serialized comment: %q", serialized)
 	}
-	if got := hostsCommentState(serialized); got != "managed by tf-nix" {
+	if got := hostsCommentState(serialized); got != "managed by tf-linux-provider" {
 		t.Fatalf("unexpected state comment: %q", got)
 	}
 }
@@ -490,7 +490,7 @@ func TestFileUpdateWithValidationStagesCandidateBeforeMove(t *testing.T) {
 		commands = append(commands, cmd+" "+strings.Join(args, " "))
 		switch cmd {
 		case "validator":
-			if len(args) != 2 || args[0] != "--check" || !strings.Contains(args[1], ".app.conf.tf-nix-candidate-") {
+			if len(args) != 2 || args[0] != "--check" || !strings.Contains(args[1], ".app.conf.tf-linux-provider-candidate-") {
 				t.Fatalf("unexpected validator args: %#v", args)
 			}
 			return &pluginsdk.CmdResult{ExitCode: 0}, nil
@@ -513,7 +513,7 @@ func TestFileUpdateWithValidationStagesCandidateBeforeMove(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update returned error: %v", err)
 	}
-	if wrotePath == finalPath || !strings.Contains(wrotePath, ".app.conf.tf-nix-candidate-") {
+	if wrotePath == finalPath || !strings.Contains(wrotePath, ".app.conf.tf-linux-provider-candidate-") {
 		t.Fatalf("expected staged candidate write path, got %q", wrotePath)
 	}
 	if string(wroteData) != "updated" || wroteMode != 0o640 {
@@ -525,7 +525,7 @@ func TestFileUpdateWithValidationStagesCandidateBeforeMove(t *testing.T) {
 	if ensuredPath != "/etc/app" || ensuredMode != 0o755 {
 		t.Fatalf("unexpected ensured directory: path=%q mode=%#o", ensuredPath, ensuredMode)
 	}
-	if renameTo != finalPath || !strings.Contains(renameFrom, ".app.conf.tf-nix-candidate-") {
+	if renameTo != finalPath || !strings.Contains(renameFrom, ".app.conf.tf-linux-provider-candidate-") {
 		t.Fatalf("unexpected file rename: from=%q to=%q", renameFrom, renameTo)
 	}
 	if len(commands) != 1 || !strings.HasPrefix(commands[0], "validator --check ") {
@@ -767,7 +767,7 @@ func TestFileUpdateWithValidationInPlaceRollsBackOnFailure(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "bad config") {
 		t.Fatalf("expected validation failure, got %v", err)
 	}
-	if wrotePath == finalPath || !strings.Contains(wrotePath, ".app.conf.tf-nix-candidate-") {
+	if wrotePath == finalPath || !strings.Contains(wrotePath, ".app.conf.tf-linux-provider-candidate-") {
 		t.Fatalf("expected staged candidate write path, got %q", wrotePath)
 	}
 	if ensuredPath != "/etc/app" || ensuredMode != 0o755 {
@@ -776,7 +776,7 @@ func TestFileUpdateWithValidationInPlaceRollsBackOnFailure(t *testing.T) {
 	if len(renames) != 3 {
 		t.Fatalf("unexpected rename calls: %#v", renames)
 	}
-	if renames[0][0] != finalPath || !strings.Contains(renames[0][1], ".app.conf.tf-nix-backup-") {
+	if renames[0][0] != finalPath || !strings.Contains(renames[0][1], ".app.conf.tf-linux-provider-backup-") {
 		t.Fatalf("unexpected backup rename: %#v", renames[0])
 	}
 	if renames[1][0] != wrotePath || renames[1][1] != finalPath {
@@ -785,7 +785,7 @@ func TestFileUpdateWithValidationInPlaceRollsBackOnFailure(t *testing.T) {
 	if len(deletePaths) != 1 || deletePaths[0] != finalPath {
 		t.Fatalf("unexpected rollback delete paths: %#v", deletePaths)
 	}
-	if renames[2][1] != finalPath || !strings.Contains(renames[2][0], ".app.conf.tf-nix-backup-") {
+	if renames[2][1] != finalPath || !strings.Contains(renames[2][0], ".app.conf.tf-linux-provider-backup-") {
 		t.Fatalf("unexpected rollback restore rename: %#v", renames[2])
 	}
 	if len(commands) != 1 {
@@ -847,13 +847,13 @@ func TestKernelModulesUpdateWritesConfigAndLoadsModules(t *testing.T) {
 	}
 
 	state, err := (&kernelModulesResource{}).Update(nil, pluginsdk.StateData{
-		"path":    "/etc/modules-load.d/90-tf-nix-kubernetes.conf",
+		"path":    "/etc/modules-load.d/90-tf-linux-provider-kubernetes.conf",
 		"modules": []string{"overlay", "br_netfilter", "overlay"},
 	})
 	if err != nil {
 		t.Fatalf("Update returned error: %v", err)
 	}
-	if wrotePath != "/etc/modules-load.d/90-tf-nix-kubernetes.conf" || string(wroteData) != "overlay\nbr_netfilter\n" || wroteMode != 0o644 {
+	if wrotePath != "/etc/modules-load.d/90-tf-linux-provider-kubernetes.conf" || string(wroteData) != "overlay\nbr_netfilter\n" || wroteMode != 0o644 {
 		t.Fatalf("unexpected file write: path=%q mode=%#o data=%q", wrotePath, wroteMode, string(wroteData))
 	}
 	if chownPath != wrotePath || chownOwner != "root" || chownGroup != "root" {
@@ -885,7 +885,7 @@ func TestKernelModulesReadParsesManagedFile(t *testing.T) {
 		return []byte("overlay\n# comment\nbr_netfilter\n"), nil
 	}
 
-	state, err := (&kernelModulesResource{}).Read(pluginsdk.StateData{"path": "/etc/modules-load.d/90-tf-nix-kubernetes.conf"})
+	state, err := (&kernelModulesResource{}).Read(pluginsdk.StateData{"path": "/etc/modules-load.d/90-tf-linux-provider-kubernetes.conf"})
 	if err != nil {
 		t.Fatalf("Read returned error: %v", err)
 	}
@@ -949,7 +949,7 @@ func TestSwapUpdateDisablesRuntimeAndCommentsManagedFstabEntries(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Update returned error: %v", err)
 	}
-	if wrote != "# tf-nix swap disabled: /swapfile\tnone\tswap\tsw\t0\t0\nUUID=root\t/\text4\tdefaults\t0\t1\n" {
+	if wrote != "# tf-linux-provider swap disabled: /swapfile\tnone\tswap\tsw\t0\t0\nUUID=root\t/\text4\tdefaults\t0\t1\n" {
 		t.Fatalf("unexpected fstab content: %q", wrote)
 	}
 	if len(commands) != 1 || commands[0] != "swapoff -a" {
@@ -984,7 +984,7 @@ func TestSwapUpdateRestoresManagedFstabEntriesAndRunsSwapon(t *testing.T) {
 		case swapInfoPath:
 			return []byte("Filename\tType\tSize\tUsed\tPriority\n"), nil
 		case fstabConfigPath:
-			return []byte("# tf-nix swap disabled: /swapfile\tnone\tswap\tsw\t0\t0\nUUID=root / ext4 defaults 0 1\n"), nil
+			return []byte("# tf-linux-provider swap disabled: /swapfile\tnone\tswap\tsw\t0\t0\nUUID=root / ext4 defaults 0 1\n"), nil
 		default:
 			t.Fatalf("unexpected read path %q", path)
 			return nil, nil
@@ -1098,7 +1098,7 @@ func TestFileInfoDataSourcePreservesRunAs(t *testing.T) {
 		}, nil
 	}
 
-	state, err := (&fileInfoDataSource{}).DataRead(pluginsdk.StateData{"path": "/home/tf/tf-nix-smoke-file.txt", "run_as": "tf"})
+	state, err := (&fileInfoDataSource{}).DataRead(pluginsdk.StateData{"path": "/home/tf/tf-linux-provider-smoke-file.txt", "run_as": "tf"})
 	if err != nil {
 		t.Fatalf("DataRead returned error: %v", err)
 	}

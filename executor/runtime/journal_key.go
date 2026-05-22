@@ -13,7 +13,7 @@ import (
 	"sync"
 )
 
-const journalKeyEnvVar = "TF_NIX_JOURNAL_KEY_B64"
+const journalKeyEnvVar = "TF_LINUX_PROVIDER_JOURNAL_KEY_B64"
 
 var runtimeJournalKey struct {
 	mu  sync.RWMutex
