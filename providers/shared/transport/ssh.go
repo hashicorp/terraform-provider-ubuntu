@@ -726,8 +726,8 @@ type sessionReadCloser struct {
 }
 
 func (s *sessionReadCloser) Close() error {
-	waitErr := s.session.Wait()
-	closeErr := s.session.Close()
+	waitErr := normalizeSSHSessionCloseError(s.session.Wait())
+	closeErr := normalizeSSHSessionCloseError(s.session.Close())
 	if s.stderrDone != nil {
 		<-s.stderrDone
 	}
@@ -735,6 +735,13 @@ func (s *sessionReadCloser) Close() error {
 		return annotateRemoteStderr(waitErr, s.stderrTail)
 	}
 	return annotateRemoteStderr(closeErr, s.stderrTail)
+}
+
+func normalizeSSHSessionCloseError(err error) error {
+	if errors.Is(err, io.EOF) {
+		return nil
+	}
+	return err
 }
 
 func annotateRemoteStderr(err error, tail *boundedTailBuffer) error {
