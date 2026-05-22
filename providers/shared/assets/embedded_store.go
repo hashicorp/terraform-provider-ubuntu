@@ -1,7 +1,6 @@
 package assets
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -30,10 +29,6 @@ func (s *EmbeddedStore) Validate() error {
 	missing := &MissingAssetsError{}
 	for _, arch := range s.spec.ExecutorArches {
 		if err := s.checkExecutorReadable(arch); err != nil {
-			missing.Executors = append(missing.Executors, arch)
-			continue
-		}
-		if _, err := s.executorDigests(arch); err != nil {
 			missing.Executors = append(missing.Executors, arch)
 		}
 	}
@@ -101,40 +96,11 @@ func (s *EmbeddedStore) manifestPath() string {
 	return path.Join(s.root, "manifest.json")
 }
 
-func (s *EmbeddedStore) readManifest() (assetmanifest.Manifest, error) {
-	data, err := fs.ReadFile(s.fsys, s.manifestPath())
-	if err != nil {
-		return assetmanifest.Manifest{}, fmt.Errorf("read embedded manifest: %w", err)
-	}
-	var manifest assetmanifest.Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return assetmanifest.Manifest{}, fmt.Errorf("decode embedded manifest: %w", err)
-	}
-	return manifest, nil
-}
-
-func (s *EmbeddedStore) executorDigests(arch string) (map[string]string, error) {
-	manifest, err := s.readManifest()
-	if err != nil {
-		return nil, err
-	}
-	record, err := manifest.Executor(arch)
-	if err != nil {
-		return nil, err
-	}
-	return record.Digests, nil
-}
-
 func (s *EmbeddedStore) readExecutor(arch string) (Asset, error) {
-	digests, err := s.executorDigests(arch)
-	if err != nil {
-		return Asset{}, err
-	}
-
 	compressedPath := s.compressedExecutorPath(arch)
 	data, err := fs.ReadFile(s.fsys, compressedPath)
 	if err == nil {
-		return newAssetWithDigests(data, assetmanifest.CompressionGzip, digests), nil
+		return Asset{Bytes: data, Compression: assetmanifest.CompressionGzip}, nil
 	}
 	if !errors.Is(err, fs.ErrNotExist) {
 		return Asset{}, fmt.Errorf("read embedded compressed executor %q: %w", arch, err)
@@ -147,7 +113,7 @@ func (s *EmbeddedStore) readExecutor(arch string) (Asset, error) {
 		}
 		return Asset{}, fmt.Errorf("read embedded executor %q: %w", arch, err)
 	}
-	return newAssetWithDigests(data, "", digests), nil
+	return newAsset(data), nil
 }
 
 func (s *EmbeddedStore) readPlugin(name string) (Asset, error) {

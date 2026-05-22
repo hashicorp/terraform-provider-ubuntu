@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
-
-	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 )
 
 const (
@@ -58,32 +56,14 @@ func (c *assetCache) storePlugin(name string, asset Asset) Asset {
 }
 
 func newAsset(data []byte) Asset {
-	return newAssetWithCompression(data, "")
+	return Asset{Bytes: data}
 }
 
 func newAssetWithCompression(data []byte, compression string) Asset {
-	return newAssetWithDigests(data, compression, assetmanifest.MustDigestSet(data))
-}
-
-func newAssetWithDigests(data []byte, compression string, digests map[string]string) Asset {
-	digests = cloneDigests(digests)
 	return Asset{
 		Bytes:       data,
-		Digest:      digests[assetmanifest.ConventionalDigestAlgorithm],
-		Digests:     digests,
 		Compression: compression,
 	}
-}
-
-func cloneDigests(digests map[string]string) map[string]string {
-	if len(digests) == 0 {
-		return nil
-	}
-	clone := make(map[string]string, len(digests))
-	for algorithm, digest := range digests {
-		clone[algorithm] = digest
-	}
-	return clone
 }
 
 func executorFileName(arch string) string {

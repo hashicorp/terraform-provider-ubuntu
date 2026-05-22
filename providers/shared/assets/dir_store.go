@@ -1,7 +1,6 @@
 package assets
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -32,10 +31,6 @@ func (s *DirStore) Validate() error {
 	missing := &MissingAssetsError{}
 	for _, arch := range s.spec.ExecutorArches {
 		if err := s.checkExecutorReadable(arch); err != nil {
-			missing.Executors = append(missing.Executors, arch)
-			continue
-		}
-		if _, err := s.executorDigests(arch); err != nil {
 			missing.Executors = append(missing.Executors, arch)
 		}
 	}
@@ -103,40 +98,11 @@ func (s *DirStore) manifestPath() string {
 	return filepath.Join(s.root, "manifest.json")
 }
 
-func (s *DirStore) readManifest() (assetmanifest.Manifest, error) {
-	data, err := os.ReadFile(s.manifestPath())
-	if err != nil {
-		return assetmanifest.Manifest{}, fmt.Errorf("read manifest from %s: %w", s.root, err)
-	}
-	var manifest assetmanifest.Manifest
-	if err := json.Unmarshal(data, &manifest); err != nil {
-		return assetmanifest.Manifest{}, fmt.Errorf("decode manifest from %s: %w", s.root, err)
-	}
-	return manifest, nil
-}
-
-func (s *DirStore) executorDigests(arch string) (map[string]string, error) {
-	manifest, err := s.readManifest()
-	if err != nil {
-		return nil, err
-	}
-	record, err := manifest.Executor(arch)
-	if err != nil {
-		return nil, err
-	}
-	return record.Digests, nil
-}
-
 func (s *DirStore) readExecutor(arch string) (Asset, error) {
-	digests, err := s.executorDigests(arch)
-	if err != nil {
-		return Asset{}, err
-	}
-
 	compressedPath := s.compressedExecutorPath(arch)
 	data, err := os.ReadFile(compressedPath)
 	if err == nil {
-		return newAssetWithDigests(data, assetmanifest.CompressionGzip, digests), nil
+		return Asset{Bytes: data, Compression: assetmanifest.CompressionGzip}, nil
 	}
 	if !errors.Is(err, os.ErrNotExist) {
 		return Asset{}, fmt.Errorf("read compressed executor %q from %s: %w", arch, s.executorsRoot, err)
@@ -149,7 +115,7 @@ func (s *DirStore) readExecutor(arch string) (Asset, error) {
 		}
 		return Asset{}, fmt.Errorf("read executor %q from %s: %w", arch, s.executorsRoot, err)
 	}
-	return newAssetWithDigests(data, "", digests), nil
+	return newAsset(data), nil
 }
 
 func (s *DirStore) readPlugin(name string) (Asset, error) {

@@ -21,31 +21,31 @@ func TestLoadEmbeddedManifestErrors(t *testing.T) {
 		{
 			name:     "missing manifest",
 			provider: "ubuntu",
-			wantErr:  "executor digest manifest not embedded",
+			wantErr:  "executor runtime manifest not embedded",
 		},
 		{
 			name:     "invalid base64",
 			base64:   "%",
 			provider: "ubuntu",
-			wantErr:  "decode embedded digest manifest:",
+			wantErr:  "decode embedded runtime manifest:",
 		},
 		{
 			name:     "invalid json",
 			base64:   base64.StdEncoding.EncodeToString([]byte("{")),
 			provider: "ubuntu",
-			wantErr:  "unmarshal embedded digest manifest:",
+			wantErr:  "unmarshal embedded runtime manifest:",
 		},
 		{
 			name:     "unsupported version",
 			base64:   mustEncodeEmbeddedManifest(t, assetmanifest.Manifest{Version: 99, Provider: "ubuntu"}),
 			provider: "ubuntu",
-			wantErr:  "unsupported embedded digest manifest version 99",
+			wantErr:  "unsupported embedded runtime manifest version 99",
 		},
 		{
 			name:     "provider mismatch",
 			base64:   mustEncodeEmbeddedManifest(t, assetmanifest.Manifest{Version: assetmanifest.ManifestVersion, Provider: "rocky"}),
 			provider: "ubuntu",
-			wantErr:  `embedded digest manifest provider mismatch: want "ubuntu", got "rocky"`,
+			wantErr:  `embedded runtime manifest provider mismatch: want "ubuntu", got "rocky"`,
 		},
 	}
 
@@ -115,7 +115,7 @@ func TestNewDispatcherUsesEmbeddedManifestState(t *testing.T) {
 
 	withEmbeddedManifestState(t, "", "ubuntu", func() {
 		dispatcher := NewDispatcher(nil)
-		if dispatcher.manifestErr == nil || dispatcher.manifestErr.Error() != "executor digest manifest not embedded" {
+		if dispatcher.manifestErr == nil || dispatcher.manifestErr.Error() != "executor runtime manifest not embedded" {
 			t.Fatalf("NewDispatcher().manifestErr = %v, want missing embedded manifest error", dispatcher.manifestErr)
 		}
 	})

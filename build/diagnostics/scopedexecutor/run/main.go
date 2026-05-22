@@ -109,13 +109,6 @@ func buildProviderScopedExecutors(repoRoot, distDir string, spec catalog.Provide
 		if err := buildScopedExecutorBinaryFunc(repoRoot, executorPath, arch, manifestBase64, spec.Name); err != nil {
 			return err
 		}
-		executorBytes, err := os.ReadFile(executorPath)
-		if err != nil {
-			return fmt.Errorf("read scoped executor %s: %w", arch, err)
-		}
-		if err := manifest.SetExecutor(arch, executorBytes); err != nil {
-			return fmt.Errorf("build executor manifest record %s: %w", arch, err)
-		}
 	}
 
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")

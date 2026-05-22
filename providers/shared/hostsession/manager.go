@@ -184,7 +184,7 @@ func (m *ExecutorManager) SetEncryptedTunnelEnabled(enabled bool) {
 	m.encryptedTunnel = enabled
 }
 
-func (m *ExecutorManager) SetUsePostQuantumDigests(enabled bool) {
+func (m *ExecutorManager) SetUsePostQuantumPluginDigests(enabled bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.usePostQuantum = enabled
@@ -224,12 +224,6 @@ func (m *ExecutorManager) pluginVerificationOptions() (bool, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	return m.usePostQuantum, m.dualVerification
-}
-
-func (m *ExecutorManager) executorDigestAlgorithm() string {
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	return assetmanifest.DigestAlgorithmForSelection(m.usePostQuantum)
 }
 
 // executorDir returns the staging directory path on the target.
@@ -352,49 +346,31 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 func (m *ExecutorManager) pushExecutor(ctx context.Context, session *transport.Session, binPath string, asset assets.Asset) error {
 	switch asset.Compression {
 	case "":
-		if err := m.verifyExecutorBinary(asset.Bytes, asset); err != nil {
-			return err
-		}
 		if err := session.Transport.PushFile(ctx, binPath, asset.Bytes, 0o755); err != nil {
 			return fmt.Errorf("push executor binary: %w", err)
 		}
 		return nil
 	case assetmanifest.CompressionGzip:
-		raw, err := plugincodec.DecompressExecutorBinary(asset.Bytes, asset.Compression)
-		if err != nil {
-			return err
-		}
-		if err := m.verifyExecutorBinary(raw, asset); err != nil {
-			return err
-		}
-
 		if m.remoteCommandAvailable(ctx, session, "gzip") {
 			command := fmt.Sprintf("mkdir -p %s && gzip -dc > %s && chmod 0755 %s", shellQuote(path.Dir(binPath)), shellQuote(binPath), shellQuote(binPath))
 			if err := runTransportCommandWithInput(ctx, session, command, asset.Bytes); err != nil {
-				return fmt.Errorf("stream compressed executor binary: %w", err)
+				return fmt.Errorf("extract compressed executor on target with gzip: %w", err)
 			}
 			return nil
 		}
 
-		if err := session.Transport.PushFile(ctx, binPath, raw, 0o755); err != nil {
-			return fmt.Errorf("push decompressed executor binary: %w", err)
+		raw, err := plugincodec.DecompressExecutorBinary(asset.Bytes, asset.Compression)
+		if err != nil {
+			return fmt.Errorf("decompress executor for non-gzip target: %w", err)
+		}
+		command := fmt.Sprintf("mkdir -p %s && cat > %s && chmod 0755 %s", shellQuote(path.Dir(binPath)), shellQuote(binPath), shellQuote(binPath))
+		if err := runTransportCommandWithInput(ctx, session, command, raw); err != nil {
+			return fmt.Errorf("stream decompressed executor to target without gzip: %w", err)
 		}
 		return nil
 	default:
 		return fmt.Errorf("unsupported executor compression %q", asset.Compression)
 	}
-}
-
-func (m *ExecutorManager) verifyExecutorBinary(data []byte, asset assets.Asset) error {
-	algorithm := m.executorDigestAlgorithm()
-	want, err := asset.DigestForAlgorithm(algorithm)
-	if err != nil {
-		return fmt.Errorf("select executor %s digest: %w", algorithm, err)
-	}
-	if err := assetmanifest.VerifyDigest(data, want); err != nil {
-		return fmt.Errorf("verify decompressed executor %s digest: %w", algorithm, err)
-	}
-	return nil
 }
 
 func (m *ExecutorManager) remoteCommandAvailable(ctx context.Context, session *transport.Session, commandName string) bool {
@@ -434,12 +410,6 @@ func runTransportCommandWithInput(ctx context.Context, session *transport.Sessio
 	_, copyErr := io.Copy(&out, stdout)
 	closeOutputErr := stdout.Close()
 
-	if writeErr != nil {
-		return writeErr
-	}
-	if closeInputErr != nil {
-		return closeInputErr
-	}
 	if copyErr != nil {
 		return copyErr
 	}
@@ -448,15 +418,21 @@ func runTransportCommandWithInput(ctx context.Context, session *transport.Sessio
 	}
 
 	body, rc, ok := parseExitMarker(out.Bytes(), exitMarker)
-	if !ok {
-		return fmt.Errorf("remote command did not report exit status; output: %s", strings.TrimSpace(out.String()))
-	}
-	if rc != 0 {
+	if ok && rc != 0 {
 		trimmed := strings.TrimSpace(string(body))
 		if trimmed == "" {
 			return fmt.Errorf("remote command failed (exit %d)", rc)
 		}
 		return fmt.Errorf("remote command failed (exit %d): %s", rc, trimmed)
+	}
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeInputErr != nil {
+		return closeInputErr
+	}
+	if !ok {
+		return fmt.Errorf("remote command did not report exit status; output: %s", strings.TrimSpace(out.String()))
 	}
 	return nil
 }

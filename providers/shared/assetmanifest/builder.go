@@ -55,26 +55,6 @@ func NewPluginRecord(uncompressed, compressed []byte) (PluginManifestRecord, err
 	}, nil
 }
 
-func NewExecutorRecord(data []byte) (ExecutorManifestRecord, error) {
-	digests, err := DigestSet(data)
-	if err != nil {
-		return ExecutorManifestRecord{}, err
-	}
-	return ExecutorManifestRecord{Digests: digests}, nil
-}
-
-func (m *Manifest) SetExecutor(arch string, data []byte) error {
-	record, err := NewExecutorRecord(data)
-	if err != nil {
-		return err
-	}
-	if m.Executors == nil {
-		m.Executors = make(map[string]ExecutorManifestRecord)
-	}
-	m.Executors[arch] = record
-	return nil
-}
-
 func DigestSet(data []byte) (map[string]string, error) {
 	result := make(map[string]string, len(ManifestDigestAlgorithms))
 	for _, algorithm := range ManifestDigestAlgorithms {
@@ -85,12 +65,4 @@ func DigestSet(data []byte) (map[string]string, error) {
 		result[algorithm] = digest
 	}
 	return result, nil
-}
-
-func MustDigestSet(data []byte) map[string]string {
-	digests, err := DigestSet(data)
-	if err != nil {
-		panic(err)
-	}
-	return digests
 }
