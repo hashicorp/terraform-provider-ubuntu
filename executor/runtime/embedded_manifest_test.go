@@ -8,7 +8,7 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 )
 
 func TestLoadEmbeddedManifestErrors(t *testing.T) {
@@ -21,31 +21,31 @@ func TestLoadEmbeddedManifestErrors(t *testing.T) {
 		{
 			name:     "missing manifest",
 			provider: "ubuntu",
-			wantErr:  "executor digest manifest not embedded",
+			wantErr:  "executor runtime manifest not embedded",
 		},
 		{
 			name:     "invalid base64",
 			base64:   "%",
 			provider: "ubuntu",
-			wantErr:  "decode embedded digest manifest:",
+			wantErr:  "decode embedded runtime manifest:",
 		},
 		{
 			name:     "invalid json",
 			base64:   base64.StdEncoding.EncodeToString([]byte("{")),
 			provider: "ubuntu",
-			wantErr:  "unmarshal embedded digest manifest:",
+			wantErr:  "unmarshal embedded runtime manifest:",
 		},
 		{
 			name:     "unsupported version",
-			base64:   mustEncodeEmbeddedManifest(t, assets.Manifest{Version: 99, Provider: "ubuntu"}),
+			base64:   mustEncodeEmbeddedManifest(t, assetmanifest.Manifest{Version: 99, Provider: "ubuntu"}),
 			provider: "ubuntu",
-			wantErr:  "unsupported embedded digest manifest version 99",
+			wantErr:  "unsupported embedded runtime manifest version 99",
 		},
 		{
 			name:     "provider mismatch",
-			base64:   mustEncodeEmbeddedManifest(t, assets.Manifest{Version: assets.ManifestVersion, Provider: "rocky"}),
+			base64:   mustEncodeEmbeddedManifest(t, assetmanifest.Manifest{Version: assetmanifest.ManifestVersion, Provider: "rocky"}),
 			provider: "ubuntu",
-			wantErr:  `embedded digest manifest provider mismatch: want "ubuntu", got "rocky"`,
+			wantErr:  `embedded runtime manifest provider mismatch: want "ubuntu", got "rocky"`,
 		},
 	}
 
@@ -65,13 +65,13 @@ func TestLoadEmbeddedManifestErrors(t *testing.T) {
 }
 
 func TestLoadEmbeddedManifestSuccessAndCache(t *testing.T) {
-	want := assets.Manifest{
-		Version:        assets.ManifestVersion,
+	want := assetmanifest.Manifest{
+		Version:        assetmanifest.ManifestVersion,
 		Provider:       "ubuntu",
 		ExecutorArches: []string{"amd64", "arm64"},
-		Plugins: map[string]assets.PluginManifestRecord{
+		Plugins: map[string]assetmanifest.PluginManifestRecord{
 			"linux_commands": {
-				Compression:         assets.CompressionZstd,
+				Compression:         assetmanifest.CompressionZstd,
 				CompressedDigests:   map[string]string{"blake3": "abc", "shake256": "def"},
 				UncompressedDigests: map[string]string{"blake3": "ghi", "shake256": "jkl"},
 			},
@@ -101,7 +101,7 @@ func TestLoadEmbeddedManifestSuccessAndCache(t *testing.T) {
 }
 
 func TestNewDispatcherUsesEmbeddedManifestState(t *testing.T) {
-	want := assets.Manifest{Version: assets.ManifestVersion, Provider: "ubuntu"}
+	want := assetmanifest.Manifest{Version: assetmanifest.ManifestVersion, Provider: "ubuntu"}
 
 	withEmbeddedManifestState(t, mustEncodeEmbeddedManifest(t, want), "ubuntu", func() {
 		dispatcher := NewDispatcher(nil)
@@ -115,7 +115,7 @@ func TestNewDispatcherUsesEmbeddedManifestState(t *testing.T) {
 
 	withEmbeddedManifestState(t, "", "ubuntu", func() {
 		dispatcher := NewDispatcher(nil)
-		if dispatcher.manifestErr == nil || dispatcher.manifestErr.Error() != "executor digest manifest not embedded" {
+		if dispatcher.manifestErr == nil || dispatcher.manifestErr.Error() != "executor runtime manifest not embedded" {
 			t.Fatalf("NewDispatcher().manifestErr = %v, want missing embedded manifest error", dispatcher.manifestErr)
 		}
 	})
@@ -132,7 +132,7 @@ func withEmbeddedManifestState(t *testing.T, base64Value, provider string, fn fu
 	embeddedManifestBase64 = base64Value
 	embeddedManifestProvider = provider
 	embeddedManifestOnce = sync.Once{}
-	embeddedManifest = assets.Manifest{}
+	embeddedManifest = assetmanifest.Manifest{}
 	embeddedManifestErr = nil
 
 	defer func() {
@@ -146,7 +146,7 @@ func withEmbeddedManifestState(t *testing.T, base64Value, provider string, fn fu
 	fn()
 }
 
-func mustEncodeEmbeddedManifest(t *testing.T, manifest assets.Manifest) string {
+func mustEncodeEmbeddedManifest(t *testing.T, manifest assetmanifest.Manifest) string {
 	t.Helper()
 
 	data, err := json.Marshal(manifest)

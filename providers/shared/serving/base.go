@@ -404,7 +404,7 @@ func (p *BaseProvider) Configure(ctx context.Context, req provider.ConfigureRequ
 	}
 	p.manager.SetEncryptedTunnelEnabled(encryptedTunnel)
 	if !config.UsePostQuantumHashes.IsNull() {
-		p.manager.SetUsePostQuantumDigests(config.UsePostQuantumHashes.ValueBool())
+		p.manager.SetUsePostQuantumPluginDigests(config.UsePostQuantumHashes.ValueBool())
 	}
 	if !config.DualPluginVerification.IsNull() {
 		p.manager.SetDualPluginVerification(config.DualPluginVerification.ValueBool())

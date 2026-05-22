@@ -13,8 +13,9 @@ import (
 	"time"
 
 	"github.com/hashicorp/terraform-provider-ubuntu/executor/capabilities"
+	"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime/plugincodec"
 	digestutil "github.com/hashicorp/terraform-provider-ubuntu/guest/sdk/digest"
-	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 	"github.com/hashicorp/terraform-provider-ubuntu/shared/hostrpc"
 )
 
@@ -42,7 +43,7 @@ func TestDispatcherOperationEntryPointsUseRuntimeCalls(t *testing.T) {
 		return json.RawMessage(fmt.Sprintf(`{"state":{"action":%q}}`, action)), nil
 	}
 
-	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assets.Manifest{}, nil)
+	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assetmanifest.Manifest{}, nil)
 	dispatcher.plugins["module"] = true
 	dispatcher.plugins["resource"] = true
 
@@ -125,7 +126,7 @@ func TestDispatcherHelpersAndHostCommand(t *testing.T) {
 		t.Fatalf("write host command script: %v", err)
 	}
 
-	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assets.Manifest{}, nil)
+	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assetmanifest.Manifest{}, nil)
 
 	commandResult, err := dispatcher.HostCommand(context.Background(), hostrpc.HostCommandParams{Name: scriptPath, Args: []string{"hello"}})
 	if err != nil {
@@ -210,27 +211,27 @@ func TestDispatcherHelpersAndHostCommand(t *testing.T) {
 }
 
 func TestDispatcherLoadModuleReportsDigestAndDecompressionFailures(t *testing.T) {
-	compressed, err := assets.CompressPluginModule([]byte("plugin"))
+	compressed, err := plugincodec.CompressPluginModule([]byte("plugin"))
 	if err != nil {
 		t.Fatalf("CompressPluginModule() returned error: %v", err)
 	}
-	badDigestRecord, err := assets.NewPluginManifestRecord([]byte("plugin"), compressed)
+	badDigestRecord, err := assetmanifest.NewPluginRecord([]byte("plugin"), compressed)
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord(bad-digest) returned error: %v", err)
 	}
-	badCompressionRecord, err := assets.NewPluginManifestRecord([]byte("plugin"), []byte("not-zstd"))
+	badCompressionRecord, err := assetmanifest.NewPluginRecord([]byte("plugin"), []byte("not-zstd"))
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord(bad-compression) returned error: %v", err)
 	}
-	unsupportedCompressionRecord, err := assets.NewPluginManifestRecord([]byte("plugin"), []byte("plugin"))
+	unsupportedCompressionRecord, err := assetmanifest.NewPluginRecord([]byte("plugin"), []byte("plugin"))
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord(unsupported-compression) returned error: %v", err)
 	}
-	dispatcher := NewDispatcherWithManifest(nil, assets.Manifest{
-		Version:        assets.ManifestVersion,
+	dispatcher := NewDispatcherWithManifest(nil, assetmanifest.Manifest{
+		Version:        assetmanifest.ManifestVersion,
 		Provider:       "test-provider",
 		ExecutorArches: []string{"amd64"},
-		Plugins: map[string]assets.PluginManifestRecord{
+		Plugins: map[string]assetmanifest.PluginManifestRecord{
 			"bad-digest":              badDigestRecord,
 			"bad-compression":         badCompressionRecord,
 			"unsupported-compression": unsupportedCompressionRecord,
@@ -240,7 +241,7 @@ func TestDispatcherLoadModuleReportsDigestAndDecompressionFailures(t *testing.T)
 	if _, err := dispatcher.LoadModule(hostrpc.ModuleLoadParams{
 		Name:            "bad-digest",
 		Wasm:            []byte("not-a-real-plugin"),
-		WasmCompression: assets.CompressionZstd,
+		WasmCompression: assetmanifest.CompressionZstd,
 	}); err == nil {
 		t.Fatal("LoadModule() should reject a mismatched digest")
 	}
@@ -248,7 +249,7 @@ func TestDispatcherLoadModuleReportsDigestAndDecompressionFailures(t *testing.T)
 	if _, err := dispatcher.LoadModule(hostrpc.ModuleLoadParams{
 		Name:            "bad-compression",
 		Wasm:            []byte("not-zstd"),
-		WasmCompression: assets.CompressionZstd,
+		WasmCompression: assetmanifest.CompressionZstd,
 	}); err == nil || !strings.Contains(err.Error(), "decode zstd plugin module") {
 		t.Fatalf("LoadModule(zstd decode failure) error = %v, want zstd decode failure", err)
 	}
@@ -263,28 +264,28 @@ func TestDispatcherLoadModuleReportsDigestAndDecompressionFailures(t *testing.T)
 }
 
 func TestDispatcherLoadModuleManifestAndRecordErrors(t *testing.T) {
-	compressed, err := assets.CompressPluginModule([]byte("plugin"))
+	compressed, err := plugincodec.CompressPluginModule([]byte("plugin"))
 	if err != nil {
 		t.Fatalf("CompressPluginModule() returned error: %v", err)
 	}
-	record, err := assets.NewPluginManifestRecord([]byte("plugin"), compressed)
+	record, err := assetmanifest.NewPluginRecord([]byte("plugin"), compressed)
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord() returned error: %v", err)
 	}
-	delete(record.CompressedDigests, assets.ConventionalDigestAlgorithm)
+	delete(record.CompressedDigests, assetmanifest.ConventionalDigestAlgorithm)
 
-	recordMissingUncompressed, err := assets.NewPluginManifestRecord([]byte("plugin"), compressed)
+	recordMissingUncompressed, err := assetmanifest.NewPluginRecord([]byte("plugin"), compressed)
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord() returned error: %v", err)
 	}
-	delete(recordMissingUncompressed.UncompressedDigests, assets.ConventionalDigestAlgorithm)
+	delete(recordMissingUncompressed.UncompressedDigests, assetmanifest.ConventionalDigestAlgorithm)
 
 	manifestErr := errors.New("manifest failed")
-	manifest := assets.Manifest{
-		Version:        assets.ManifestVersion,
+	manifest := assetmanifest.Manifest{
+		Version:        assetmanifest.ManifestVersion,
 		Provider:       "test-provider",
 		ExecutorArches: []string{"amd64"},
-		Plugins: map[string]assets.PluginManifestRecord{
+		Plugins: map[string]assetmanifest.PluginManifestRecord{
 			"missing-compressed":   record,
 			"missing-uncompressed": recordMissingUncompressed,
 		},
@@ -298,11 +299,11 @@ func TestDispatcherLoadModuleManifestAndRecordErrors(t *testing.T) {
 	}{
 		{
 			name:       "manifest error",
-			dispatcher: NewDispatcherWithManifest(nil, assets.Manifest{}, manifestErr),
+			dispatcher: NewDispatcherWithManifest(nil, assetmanifest.Manifest{}, manifestErr),
 			params: hostrpc.ModuleLoadParams{
 				Name:            "linux_commands",
 				Wasm:            compressed,
-				WasmCompression: assets.CompressionZstd,
+				WasmCompression: assetmanifest.CompressionZstd,
 			},
 			wantErr: "manifest failed",
 		},
@@ -312,7 +313,7 @@ func TestDispatcherLoadModuleManifestAndRecordErrors(t *testing.T) {
 			params: hostrpc.ModuleLoadParams{
 				Name:            "linux_commands",
 				Wasm:            compressed,
-				WasmCompression: assets.CompressionZstd,
+				WasmCompression: assetmanifest.CompressionZstd,
 			},
 			wantErr: `plugin digest manifest missing entry for "linux_commands"`,
 		},
@@ -322,7 +323,7 @@ func TestDispatcherLoadModuleManifestAndRecordErrors(t *testing.T) {
 			params: hostrpc.ModuleLoadParams{
 				Name:            "missing-compressed",
 				Wasm:            compressed,
-				WasmCompression: assets.CompressionZstd,
+				WasmCompression: assetmanifest.CompressionZstd,
 			},
 			wantErr: "plugin digest manifest missing compressed blake3 digest",
 		},
@@ -332,7 +333,7 @@ func TestDispatcherLoadModuleManifestAndRecordErrors(t *testing.T) {
 			params: hostrpc.ModuleLoadParams{
 				Name:                   "missing-uncompressed",
 				Wasm:                   compressed,
-				WasmCompression:        assets.CompressionZstd,
+				WasmCompression:        assetmanifest.CompressionZstd,
 				DualPluginVerification: true,
 			},
 			wantErr: "plugin digest manifest missing uncompressed blake3 digest",
@@ -349,23 +350,23 @@ func TestDispatcherLoadModuleManifestAndRecordErrors(t *testing.T) {
 }
 
 func TestDispatcherLoadModuleDigestSelectionAndDualVerification(t *testing.T) {
-	compressed, err := assets.CompressPluginModule([]byte("plugin"))
+	compressed, err := plugincodec.CompressPluginModule([]byte("plugin"))
 	if err != nil {
 		t.Fatalf("CompressPluginModule() returned error: %v", err)
 	}
 
-	conventionalRecord, err := assets.NewPluginManifestRecord([]byte("plugin"), compressed)
+	conventionalRecord, err := assetmanifest.NewPluginRecord([]byte("plugin"), compressed)
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord(conventional) returned error: %v", err)
 	}
-	conventionalRecord.CompressedDigests[assets.PostQuantumDigestAlgorithm] = conventionalRecord.CompressedDigests[assets.PostQuantumDigestAlgorithm] + "broken"
-	conventionalRecord.UncompressedDigests[assets.PostQuantumDigestAlgorithm] = conventionalRecord.UncompressedDigests[assets.PostQuantumDigestAlgorithm] + "broken"
+	conventionalRecord.CompressedDigests[assetmanifest.PostQuantumDigestAlgorithm] = conventionalRecord.CompressedDigests[assetmanifest.PostQuantumDigestAlgorithm] + "broken"
+	conventionalRecord.UncompressedDigests[assetmanifest.PostQuantumDigestAlgorithm] = conventionalRecord.UncompressedDigests[assetmanifest.PostQuantumDigestAlgorithm] + "broken"
 
-	skipDualRecord, err := assets.NewPluginManifestRecord([]byte("plugin"), compressed)
+	skipDualRecord, err := assetmanifest.NewPluginRecord([]byte("plugin"), compressed)
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord(skip-dual) returned error: %v", err)
 	}
-	skipDualRecord.UncompressedDigests[assets.ConventionalDigestAlgorithm], err = digestutil.DigestBytes(assets.ConventionalDigestAlgorithm, []byte("different-plugin"))
+	skipDualRecord.UncompressedDigests[assetmanifest.ConventionalDigestAlgorithm], err = digestutil.DigestBytes(assetmanifest.ConventionalDigestAlgorithm, []byte("different-plugin"))
 	if err != nil {
 		t.Fatalf("DigestBytes(different-plugin) returned error: %v", err)
 	}
@@ -383,7 +384,7 @@ func TestDispatcherLoadModuleDigestSelectionAndDualVerification(t *testing.T) {
 	if _, err := NewDispatcherWithManifest(rt, testManifestWithRecord("linux_commands", conventionalRecord), nil).LoadModule(hostrpc.ModuleLoadParams{
 		Name:                   "linux_commands",
 		Wasm:                   compressed,
-		WasmCompression:        assets.CompressionZstd,
+		WasmCompression:        assetmanifest.CompressionZstd,
 		DualPluginVerification: true,
 	}); err == nil || !strings.Contains(err.Error(), `compile plugin "linux_commands"`) {
 		t.Fatalf("LoadModule(conventional digest selection) error = %v, want compile failure after verification", err)
@@ -392,7 +393,7 @@ func TestDispatcherLoadModuleDigestSelectionAndDualVerification(t *testing.T) {
 	if _, err := NewDispatcherWithManifest(nil, testManifestWithRecord("linux_commands", conventionalRecord), nil).LoadModule(hostrpc.ModuleLoadParams{
 		Name:                   "linux_commands",
 		Wasm:                   compressed,
-		WasmCompression:        assets.CompressionZstd,
+		WasmCompression:        assetmanifest.CompressionZstd,
 		UsePostQuantumDigests:  true,
 		DualPluginVerification: true,
 	}); err == nil {
@@ -402,7 +403,7 @@ func TestDispatcherLoadModuleDigestSelectionAndDualVerification(t *testing.T) {
 	if _, err := NewDispatcherWithManifest(rt, testManifestWithRecord("linux_commands", skipDualRecord), nil).LoadModule(hostrpc.ModuleLoadParams{
 		Name:            "linux_commands",
 		Wasm:            compressed,
-		WasmCompression: assets.CompressionZstd,
+		WasmCompression: assetmanifest.CompressionZstd,
 	}); err == nil || !strings.Contains(err.Error(), `compile plugin "linux_commands"`) {
 		t.Fatalf("LoadModule(skip dual verification) error = %v, want compile failure after compressed verification", err)
 	}
@@ -410,7 +411,7 @@ func TestDispatcherLoadModuleDigestSelectionAndDualVerification(t *testing.T) {
 	if _, err := NewDispatcherWithManifest(nil, testManifestWithRecord("linux_commands", skipDualRecord), nil).LoadModule(hostrpc.ModuleLoadParams{
 		Name:                   "linux_commands",
 		Wasm:                   compressed,
-		WasmCompression:        assets.CompressionZstd,
+		WasmCompression:        assetmanifest.CompressionZstd,
 		DualPluginVerification: true,
 	}); err == nil || !strings.Contains(err.Error(), "digest mismatch") {
 		t.Fatalf("LoadModule(dual verification enabled) error = %v, want uncompressed verification failure", err)
@@ -418,7 +419,7 @@ func TestDispatcherLoadModuleDigestSelectionAndDualVerification(t *testing.T) {
 }
 
 func TestDispatcherLoadModuleUsesSelectedDigestFamilyAndDualVerification(t *testing.T) {
-	compressed, err := assets.CompressPluginModule([]byte("plugin"))
+	compressed, err := plugincodec.CompressPluginModule([]byte("plugin"))
 	if err != nil {
 		t.Fatalf("CompressPluginModule() returned error: %v", err)
 	}
@@ -438,7 +439,7 @@ func TestDispatcherLoadModuleUsesSelectedDigestFamilyAndDualVerification(t *test
 		Name:                   "linux_commands",
 		UsePostQuantumDigests:  true,
 		DualPluginVerification: true,
-		WasmCompression:        assets.CompressionZstd,
+		WasmCompression:        assetmanifest.CompressionZstd,
 		Wasm:                   compressed,
 	}); err == nil || !strings.Contains(err.Error(), `compile plugin "linux_commands"`) {
 		t.Fatalf("LoadModule() error = %v, want compile failure after verification passes", err)
@@ -446,7 +447,7 @@ func TestDispatcherLoadModuleUsesSelectedDigestFamilyAndDualVerification(t *test
 }
 
 func TestDispatcherRestartProcessRequiresOperationID(t *testing.T) {
-	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assets.Manifest{}, nil)
+	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assetmanifest.Manifest{}, nil)
 
 	if _, err := dispatcher.RestartProcess(context.Background(), hostrpc.RestartProcessParams{Name: "sshd"}); err == nil || !strings.Contains(err.Error(), "missing operation_id") {
 		t.Fatalf("RestartProcess() error = %v, want missing operation_id", err)
@@ -457,7 +458,7 @@ func TestDispatcherJournalAndRebootWrappers(t *testing.T) {
 	t.Setenv("TF_LINUX_PROVIDER_EXECUTOR_JOURNAL_DIR", t.TempDir())
 	mustSetJournalKey(t, "55555555555555555555555555555555")
 
-	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assets.Manifest{}, nil)
+	dispatcher := NewDispatcherWithManifest(&WASMRuntime{hostAPI: capabilities.NewHostAPI(capabilities.HostProfile{})}, assetmanifest.Manifest{}, nil)
 
 	acquired, err := dispatcher.AcquireOperation(context.Background(), hostrpc.OperationAcquireParams{
 		HostKey:    "ssh:host-wrapper",
@@ -537,29 +538,29 @@ func assertOperationState(t *testing.T, result *hostrpc.OperationResult, want st
 	}
 }
 
-func testManifest(t *testing.T, module string, uncompressed, compressed []byte) assets.Manifest {
+func testManifest(t *testing.T, module string, uncompressed, compressed []byte) assetmanifest.Manifest {
 	t.Helper()
 
-	record, err := assets.NewPluginManifestRecord(uncompressed, compressed)
+	record, err := assetmanifest.NewPluginRecord(uncompressed, compressed)
 	if err != nil {
 		t.Fatalf("NewPluginManifestRecord() returned error: %v", err)
 	}
-	return assets.Manifest{
-		Version:        assets.ManifestVersion,
+	return assetmanifest.Manifest{
+		Version:        assetmanifest.ManifestVersion,
 		Provider:       "test-provider",
 		ExecutorArches: []string{"amd64"},
-		Plugins: map[string]assets.PluginManifestRecord{
+		Plugins: map[string]assetmanifest.PluginManifestRecord{
 			module: record,
 		},
 	}
 }
 
-func testManifestWithRecord(module string, record assets.PluginManifestRecord) assets.Manifest {
-	return assets.Manifest{
-		Version:        assets.ManifestVersion,
+func testManifestWithRecord(module string, record assetmanifest.PluginManifestRecord) assetmanifest.Manifest {
+	return assetmanifest.Manifest{
+		Version:        assetmanifest.ManifestVersion,
 		Provider:       "test-provider",
 		ExecutorArches: []string{"amd64"},
-		Plugins: map[string]assets.PluginManifestRecord{
+		Plugins: map[string]assetmanifest.PluginManifestRecord{
 			module: record,
 		},
 	}

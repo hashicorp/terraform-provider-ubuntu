@@ -1,4 +1,4 @@
-package assets
+package assetmanifest
 
 import (
 	"fmt"
@@ -11,7 +11,12 @@ const ManifestVersion = 1
 const (
 	ConventionalDigestAlgorithm = digestutil.AlgorithmBlake3
 	PostQuantumDigestAlgorithm  = digestutil.AlgorithmShake256
-	ScopedExecutorsDirName      = "scoped-executors"
+)
+
+// Canonical compression labels used in Manifest records and on assets.Asset values.
+const (
+	CompressionGzip = "gzip"
+	CompressionZstd = "zstd"
 )
 
 var ManifestDigestAlgorithms = []string{
@@ -51,14 +56,14 @@ func (m Manifest) Plugin(name string) (PluginManifestRecord, error) {
 }
 
 func (r PluginManifestRecord) CompressedDigest(algorithm string) (string, error) {
-	return manifestDigest(r.CompressedDigests, algorithm, "compressed")
+	return pluginDigest(r.CompressedDigests, algorithm, "compressed")
 }
 
 func (r PluginManifestRecord) UncompressedDigest(algorithm string) (string, error) {
-	return manifestDigest(r.UncompressedDigests, algorithm, "uncompressed")
+	return pluginDigest(r.UncompressedDigests, algorithm, "uncompressed")
 }
 
-func manifestDigest(values map[string]string, algorithm, scope string) (string, error) {
+func pluginDigest(values map[string]string, algorithm, scope string) (string, error) {
 	digest, ok := values[algorithm]
 	if !ok || digest == "" {
 		return "", fmt.Errorf("plugin digest manifest missing %s %s digest", scope, algorithm)

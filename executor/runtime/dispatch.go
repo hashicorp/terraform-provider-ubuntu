@@ -13,14 +13,15 @@ import (
 
 	"github.com/hashicorp/terraform-provider-ubuntu/executor/capabilities"
 	"github.com/hashicorp/terraform-provider-ubuntu/executor/logging"
-	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
+	"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime/plugincodec"
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 	"github.com/hashicorp/terraform-provider-ubuntu/shared/hostrpc"
 )
 
 // Dispatcher routes operations to loaded WASM plugins.
 type Dispatcher struct {
 	rt               *WASMRuntime
-	manifest         assets.Manifest
+	manifest         assetmanifest.Manifest
 	manifestErr      error
 	mu               sync.RWMutex
 	plugins          map[string]bool // tracks which plugins are loaded
@@ -58,7 +59,7 @@ func NewDispatcher(rt *WASMRuntime) *Dispatcher {
 	return NewDispatcherWithManifest(rt, manifest, err)
 }
 
-func NewDispatcherWithManifest(rt *WASMRuntime, manifest assets.Manifest, manifestErr error) *Dispatcher {
+func NewDispatcherWithManifest(rt *WASMRuntime, manifest assetmanifest.Manifest, manifestErr error) *Dispatcher {
 	return &Dispatcher{
 		rt:               rt,
 		manifest:         manifest,
@@ -77,7 +78,7 @@ type pluginResponseEnvelope struct {
 func (d *Dispatcher) LoadModule(params hostrpc.ModuleLoadParams) (*hostrpc.ModuleLoadResult, error) {
 	traceID := d.nextTraceID()
 	started := time.Now()
-	algorithm := assets.DigestAlgorithmForSelection(params.UsePostQuantumDigests)
+	algorithm := assetmanifest.DigestAlgorithmForSelection(params.UsePostQuantumDigests)
 	log.Printf("[rpc#%d] module.load start name=%q bytes=%d algorithm=%q dual=%t compression=%q", traceID, params.Name, len(params.Wasm), algorithm, params.DualPluginVerification, params.WasmCompression)
 	if d.manifestErr != nil {
 		log.Printf("[rpc#%d] module.load error duration=%s err=%v", traceID, time.Since(started), d.manifestErr)
@@ -99,12 +100,12 @@ func (d *Dispatcher) LoadModule(params hostrpc.ModuleLoadParams) (*hostrpc.Modul
 		log.Printf("[rpc#%d] module.load error duration=%s err=%v", traceID, time.Since(started), err)
 		return nil, err
 	}
-	if err := assets.VerifyDigest(params.Wasm, compressedDigest); err != nil {
+	if err := assetmanifest.VerifyDigest(params.Wasm, compressedDigest); err != nil {
 		log.Printf("[rpc#%d] module.load error duration=%s err=%v", traceID, time.Since(started), err)
 		return nil, err
 	}
 
-	wasmBytes, err := assets.DecompressPluginModule(params.Wasm, params.WasmCompression)
+	wasmBytes, err := plugincodec.DecompressPluginModule(params.Wasm, params.WasmCompression)
 	if err != nil {
 		log.Printf("[rpc#%d] module.load error duration=%s err=%v", traceID, time.Since(started), err)
 		return nil, err
@@ -115,7 +116,7 @@ func (d *Dispatcher) LoadModule(params hostrpc.ModuleLoadParams) (*hostrpc.Modul
 			log.Printf("[rpc#%d] module.load error duration=%s err=%v", traceID, time.Since(started), err)
 			return nil, err
 		}
-		if err := assets.VerifyDigest(wasmBytes, uncompressedDigest); err != nil {
+		if err := assetmanifest.VerifyDigest(wasmBytes, uncompressedDigest); err != nil {
 			log.Printf("[rpc#%d] module.load error duration=%s err=%v", traceID, time.Since(started), err)
 			return nil, err
 		}

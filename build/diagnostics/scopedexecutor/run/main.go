@@ -10,11 +10,15 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime/plugincodec"
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
 	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/catalog"
 )
 
 var buildScopedExecutorBinaryFunc = buildScopedExecutorBinary
+
+const scopedExecutorGCFlags = "all=-l"
 
 func main() {
 	var (
@@ -66,31 +70,45 @@ func buildProviderScopedExecutors(repoRoot, distDir string, spec catalog.Provide
 		}
 	}
 
-	pluginContent := make(map[string]assets.PluginManifestContent, len(spec.Catalog.AssetSpec().PluginModules))
-	for _, module := range spec.Catalog.AssetSpec().PluginModules {
+	assetSpec := spec.Catalog.AssetSpec()
+	pluginContent := make(map[string]assetmanifest.PluginContent, len(assetSpec.PluginModules))
+	for _, module := range assetSpec.PluginModules {
 		data, err := os.ReadFile(filepath.Join(distRoot, module+".wasm"))
 		if err != nil {
 			return fmt.Errorf("read plugin %s: %w", module, err)
 		}
-		compressed, err := assets.CompressPluginModule(data)
+		compressed, err := plugincodec.CompressPluginModule(data)
 		if err != nil {
 			return fmt.Errorf("compress plugin %s: %w", module, err)
 		}
-		pluginContent[module] = assets.PluginManifestContent{Uncompressed: data, Compressed: compressed}
+		pluginContent[module] = assetmanifest.PluginContent{Uncompressed: data, Compressed: compressed}
 		if err := os.WriteFile(assets.ScopedCompressedPluginPath(distRoot, spec.Name, module), compressed, 0o644); err != nil {
 			return fmt.Errorf("write compressed plugin %s: %w", module, err)
 		}
 	}
 
-	manifest, err := assets.BuildManifestWithPluginContent(spec.Name, spec.Catalog.AssetSpec(), func(name string) (assets.PluginManifestContent, error) {
+	manifest, err := assetmanifest.BuildWithPluginContent(spec.Name, assetSpec.ExecutorArches, assetSpec.PluginModules, func(name string) (assetmanifest.PluginContent, error) {
 		content, ok := pluginContent[name]
 		if !ok {
-			return assets.PluginManifestContent{}, fmt.Errorf("plugin %s not staged", name)
+			return assetmanifest.PluginContent{}, fmt.Errorf("plugin %s not staged", name)
 		}
 		return content, nil
 	})
 	if err != nil {
 		return err
+	}
+
+	embeddedManifestBytes, err := json.MarshalIndent(manifest, "", "  ")
+	if err != nil {
+		return fmt.Errorf("marshal manifest: %w", err)
+	}
+
+	manifestBase64 := base64.StdEncoding.EncodeToString(embeddedManifestBytes)
+	for _, arch := range manifest.ExecutorArches {
+		executorPath := assets.ScopedExecutorBinaryPath(distRoot, spec.Name, arch)
+		if err := buildScopedExecutorBinaryFunc(repoRoot, executorPath, arch, manifestBase64, spec.Name); err != nil {
+			return err
+		}
 	}
 
 	manifestBytes, err := json.MarshalIndent(manifest, "", "  ")
@@ -101,28 +119,13 @@ func buildProviderScopedExecutors(repoRoot, distDir string, spec catalog.Provide
 		return fmt.Errorf("write manifest: %w", err)
 	}
 
-	manifestBase64 := base64.StdEncoding.EncodeToString(manifestBytes)
-	for _, arch := range manifest.ExecutorArches {
-		if err := buildScopedExecutorBinaryFunc(repoRoot, assets.ScopedExecutorBinaryPath(distRoot, spec.Name, arch), arch, manifestBase64, spec.Name); err != nil {
-			return err
-		}
-	}
-
 	return nil
 }
 
 func buildScopedExecutorBinary(repoRoot, outputPath, arch, manifestBase64, provider string) error {
-	ldflags := strings.Join([]string{
-		"-s",
-		"-w",
-		"-buildid=",
-		"-X",
-		"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime.embeddedManifestBase64=" + manifestBase64,
-		"-X",
-		"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime.embeddedManifestProvider=" + provider,
-	}, " ")
+	ldflags := scopedExecutorLDFlags(manifestBase64, provider)
 
-	cmd := exec.Command("go", "build", "-trimpath", "-buildvcs=false", "-ldflags="+ldflags, "-o", outputPath, "./executor/daemon")
+	cmd := exec.Command("go", scopedExecutorBuildArgs(outputPath, ldflags)...)
 	cmd.Dir = repoRoot
 	cmd.Env = append(os.Environ(), "CGO_ENABLED=0", "GOOS=linux", "GOARCH="+arch)
 	output, err := cmd.CombinedOutput()
@@ -131,4 +134,20 @@ func buildScopedExecutorBinary(repoRoot, outputPath, arch, manifestBase64, provi
 	}
 
 	return nil
+}
+
+func scopedExecutorBuildArgs(outputPath, ldflags string) []string {
+	return []string{"build", "-trimpath", "-buildvcs=false", "-gcflags=" + scopedExecutorGCFlags, "-ldflags=" + ldflags, "-o", outputPath, "./executor/daemon"}
+}
+
+func scopedExecutorLDFlags(manifestBase64, provider string) string {
+	return strings.Join([]string{
+		"-s",
+		"-w",
+		"-buildid=",
+		"-X",
+		"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime.embeddedManifestBase64=" + manifestBase64,
+		"-X",
+		"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime.embeddedManifestProvider=" + provider,
+	}, " ")
 }
