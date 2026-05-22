@@ -26,8 +26,9 @@ import (
 const (
 	// defaultExecutorBasePath is the default directory on the target where the
 	// executor binary is staged.
-	defaultExecutorBasePath         = "/tmp/tf-unix"
+	defaultExecutorBasePath         = "/tmp/tf-linux"
 	executorBinName                 = "executor"
+	maxExecutorBusyPathRetries      = 8
 	defaultMutationCallTimeout      = 15 * time.Minute
 	defaultRetryAttempts            = 3
 	defaultRetryInitialBackoff      = 250 * time.Millisecond
@@ -348,15 +349,9 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 			return err
 		}
 
-		binPath := m.sessionExecutorPath(session)
-		if err := m.pushExecutor(ctx, session, binPath, asset); err != nil {
-			ensureErr = err
-			return ensureErr
-		}
-
-		stdin, stdout, err := session.Transport.StartProcess(ctx, fmt.Sprintf("%s --serve --encrypted-tunnel=%t", binPath, m.encryptedTunnelEnabled()))
+		stdin, stdout, err := m.pushAndStartExecutor(ctx, session, asset)
 		if err != nil {
-			ensureErr = fmt.Errorf("start executor: %w", err)
+			ensureErr = err
 			return ensureErr
 		}
 
@@ -385,6 +380,46 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 	m.setRPCClient(addr, client)
 
 	return nil
+}
+
+func (m *ExecutorManager) pushAndStartExecutor(ctx context.Context, session *transport.Session, asset assets.Asset) (io.WriteCloser, io.ReadCloser, error) {
+	basePath := m.sessionExecutorPath(session)
+	for attempt := 0; attempt <= maxExecutorBusyPathRetries; attempt++ {
+		binPath := executorPathForAttempt(basePath, attempt)
+		if err := m.pushExecutor(ctx, session, binPath, asset); err != nil {
+			if attempt < maxExecutorBusyPathRetries && isTextFileBusyError(err) {
+				continue
+			}
+			return nil, nil, err
+		}
+
+		stdin, stdout, err := session.Transport.StartProcess(ctx, fmt.Sprintf("%s --serve --encrypted-tunnel=%t", binPath, m.encryptedTunnelEnabled()))
+		if err != nil {
+			startErr := fmt.Errorf("start executor: %w", err)
+			if attempt < maxExecutorBusyPathRetries && isTextFileBusyError(startErr) {
+				continue
+			}
+			return nil, nil, startErr
+		}
+
+		return stdin, stdout, nil
+	}
+
+	return nil, nil, fmt.Errorf("start executor: exhausted busy-path retries for %s", basePath)
+}
+
+func executorPathForAttempt(basePath string, attempt int) string {
+	if attempt <= 0 {
+		return basePath
+	}
+	return fmt.Sprintf("%s-%d", basePath, attempt)
+}
+
+func isTextFileBusyError(err error) bool {
+	if err == nil {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "text file busy")
 }
 
 func (m *ExecutorManager) pushExecutor(ctx context.Context, session *transport.Session, binPath string, asset assets.Asset) error {
