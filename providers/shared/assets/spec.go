@@ -10,6 +10,7 @@ type Spec struct {
 type Asset struct {
 	Bytes       []byte
 	Digest      string
+	Digests     map[string]string
 	Compression string
 }
 

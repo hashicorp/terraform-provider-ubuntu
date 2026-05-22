@@ -1,6 +1,15 @@
 package assets
 
-import "fmt"
+import (
+	"bytes"
+	"fmt"
+
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
+)
+
+// zstdFrameMagic is the first four bytes of a well-formed zstd frame
+// (RFC 8478 §3.1.1).
+var zstdFrameMagic = []byte{0x28, 0xb5, 0x2f, 0xfd}
 
 type MemoryStore struct {
 	spec      Spec
@@ -8,6 +17,13 @@ type MemoryStore struct {
 	plugins   map[string]Asset
 }
 
+// NewMemoryStore returns an in-memory [Store] backed by the supplied executor
+// and plugin byte maps.
+//
+// Plugin entries must already be zstd-encoded; NewMemoryStore does not
+// compress them. Supplying anything other than a zstd frame is a programming
+// error and panics, because such bytes would later be sent to the executor and
+// fail zstd decoding far from the caller.
 func NewMemoryStore(spec Spec, executors map[string][]byte, plugins map[string][]byte) *MemoryStore {
 	store := &MemoryStore{
 		spec:      spec,
@@ -18,13 +34,19 @@ func NewMemoryStore(spec Spec, executors map[string][]byte, plugins map[string][
 		store.executors[arch] = newAsset(data)
 	}
 	for name, data := range plugins {
-		compressed, err := CompressPluginModule(data)
-		if err != nil {
-			panic(fmt.Sprintf("compress plugin %q: %v", name, err))
+		if !bytes.HasPrefix(data, zstdFrameMagic) {
+			panic(fmt.Sprintf("assets.NewMemoryStore: plugin %q must be zstd-encoded (got %d bytes with prefix %x)", name, len(data), data[:minInt(len(data), 4)]))
 		}
-		store.plugins[name] = newAssetWithCompression(compressed, CompressionZstd)
+		store.plugins[name] = newAssetWithCompression(data, assetmanifest.CompressionZstd)
 	}
 	return store
+}
+
+func minInt(a, b int) int {
+	if a < b {
+		return a
+	}
+	return b
 }
 
 func (s *MemoryStore) Validate() error {
@@ -39,10 +61,10 @@ func (s *MemoryStore) Validate() error {
 			missing.Plugins = append(missing.Plugins, name)
 		}
 	}
-	if missing.empty() {
-		return nil
+	if !missing.empty() {
+		return missing
 	}
-	return missing
+	return nil
 }
 
 func (s *MemoryStore) ExecutorBinary(arch string) (Asset, error) {

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime/plugincodec"
 	providerlayout "github.com/hashicorp/terraform-provider-ubuntu/providers/layout"
 	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
 	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/catalog"
@@ -66,8 +67,8 @@ func stageProvider(repoRoot, distDir string, spec catalog.ProviderSpec) error {
 
 	for _, arch := range assetSpec.ExecutorArches {
 		src := assets.ScopedExecutorBinaryPath(distRoot, spec.Name, arch)
-		dst := filepath.Join(executorsDir, "executor-linux-"+arch)
-		if err := copyFileWithMode(src, dst, 0o755); err != nil {
+		dst := filepath.Join(executorsDir, "executor-linux-"+arch+".gz")
+		if err := copyGzipFile(src, dst); err != nil {
 			return err
 		}
 	}
@@ -85,6 +86,18 @@ func stageProvider(repoRoot, distDir string, spec catalog.ProviderSpec) error {
 
 func copyFile(src, dst string) error {
 	return copyFileWithMode(src, dst, 0o755)
+}
+
+func copyGzipFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	compressed, err := plugincodec.CompressExecutorBinary(data)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, compressed, 0o644)
 }
 
 func copyFileWithMode(src, dst string, mode os.FileMode) error {

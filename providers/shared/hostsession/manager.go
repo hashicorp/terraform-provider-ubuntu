@@ -1,17 +1,22 @@
 package hostsession
 
 import (
-	"bufio"
+	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"path"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
 
 	"github.com/creachadair/jrpc2"
+	"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime/plugincodec"
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
 	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/supportpolicy"
 	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/transport"
@@ -20,10 +25,9 @@ import (
 
 const (
 	// defaultExecutorBasePath is the default directory on the target where the
-	// executor binary is cached, keyed by the digest of the binary.
+	// executor binary is staged.
 	defaultExecutorBasePath         = "/tmp/tf-unix"
 	executorBinName                 = "executor"
-	executorCacheKeyLength          = 12
 	defaultMutationCallTimeout      = 15 * time.Minute
 	defaultRetryAttempts            = 3
 	defaultRetryInitialBackoff      = 250 * time.Millisecond
@@ -222,41 +226,25 @@ func (m *ExecutorManager) pluginVerificationOptions() (bool, bool) {
 	return m.usePostQuantum, m.dualVerification
 }
 
-// executorDigest returns the BLAKE3 digest used to key and verify the cached executor binary.
-func (m *ExecutorManager) executorDigest(arch string) (string, error) {
-	asset, err := m.assets.ExecutorBinary(arch)
-	if err != nil {
-		return "", err
-	}
-	return assets.DigestBytes(asset.Bytes), nil
+func (m *ExecutorManager) executorDigestAlgorithm() string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return assetmanifest.DigestAlgorithmForSelection(m.usePostQuantum)
 }
 
-// executorDir returns the cache directory path on the target for a given digest.
-func (m *ExecutorManager) executorDir(digest string) string {
+// executorDir returns the staging directory path on the target.
+func (m *ExecutorManager) executorDir() string {
 	layout := m.getExecutorLayout()
-	return fmt.Sprintf("%s-%s", layout.BasePath, executorCacheKey(digest))
+	return layout.BasePath
 }
 
 // executorPath returns the full path to the executor binary on the target.
-func (m *ExecutorManager) executorPath(digest string) string {
-	return fmt.Sprintf("%s/%s", m.executorDir(digest), executorBinName)
+func (m *ExecutorManager) executorPath() string {
+	return fmt.Sprintf("%s/%s", m.executorDir(), executorBinName)
 }
 
-func executorCacheKey(digest string) string {
-	token := strings.TrimSpace(digest)
-	if _, encoded, ok := strings.Cut(token, ":"); ok && encoded != "" {
-		token = encoded
-	}
-	token = assets.DigestToken(token)
-	if len(token) > executorCacheKeyLength {
-		return token[:executorCacheKeyLength]
-	}
-	return token
-}
-
-// EnsureExecutor pushes the executor binary to the target if it is not
-// already cached, starts the executor process, and stores the stdin/stdout
-// handles on the session.
+// EnsureExecutor pushes the executor binary to the target, starts the executor
+// process, and stores the stdin/stdout handles on the session.
 func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport.Session) error {
 	session.AcquireUse()
 	defer session.ReleaseUse()
@@ -322,19 +310,10 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 			return err
 		}
 
-		digest, err := m.executorDigest(arch)
-		if err != nil {
+		binPath := m.executorPath()
+		if err := m.pushExecutor(ctx, session, binPath, asset); err != nil {
 			ensureErr = err
-			return err
-		}
-
-		binPath := m.executorPath(digest)
-
-		if !m.isExecutorCached(ctx, session, binPath, digest) {
-			if err := session.Transport.PushFile(ctx, binPath, asset.Bytes, 0755); err != nil {
-				ensureErr = fmt.Errorf("push executor binary: %w", err)
-				return ensureErr
-			}
+			return ensureErr
 		}
 
 		stdin, stdout, err := session.Transport.StartProcess(ctx, fmt.Sprintf("%s --serve --encrypted-tunnel=%t", binPath, m.encryptedTunnelEnabled()))
@@ -370,33 +349,137 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 	return nil
 }
 
-// isExecutorCached checks whether the executor binary at the given path on the
-// target matches the expected BLAKE3 digest when b3sum is available.
-func (m *ExecutorManager) isExecutorCached(ctx context.Context, session *transport.Session, binPath, expectedDigest string) bool {
-	_, expectedEncodedDigest, ok := strings.Cut(strings.TrimSpace(expectedDigest), ":")
-	if !ok || expectedEncodedDigest == "" {
-		return false
-	}
+func (m *ExecutorManager) pushExecutor(ctx context.Context, session *transport.Session, binPath string, asset assets.Asset) error {
+	switch asset.Compression {
+	case "":
+		if err := m.verifyExecutorBinary(asset.Bytes, asset); err != nil {
+			return err
+		}
+		if err := session.Transport.PushFile(ctx, binPath, asset.Bytes, 0o755); err != nil {
+			return fmt.Errorf("push executor binary: %w", err)
+		}
+		return nil
+	case assetmanifest.CompressionGzip:
+		raw, err := plugincodec.DecompressExecutorBinary(asset.Bytes, asset.Compression)
+		if err != nil {
+			return err
+		}
+		if err := m.verifyExecutorBinary(raw, asset); err != nil {
+			return err
+		}
 
-	checkCmd := fmt.Sprintf("if command -v b3sum >/dev/null 2>&1; then b3sum %s 2>/dev/null; fi", shellQuote(binPath))
-	stdin, stdout, err := session.Transport.StartProcess(ctx, checkCmd)
+		if m.remoteCommandAvailable(ctx, session, "gzip") {
+			command := fmt.Sprintf("mkdir -p %s && gzip -dc > %s && chmod 0755 %s", shellQuote(path.Dir(binPath)), shellQuote(binPath), shellQuote(binPath))
+			if err := runTransportCommandWithInput(ctx, session, command, asset.Bytes); err != nil {
+				return fmt.Errorf("stream compressed executor binary: %w", err)
+			}
+			return nil
+		}
+
+		if err := session.Transport.PushFile(ctx, binPath, raw, 0o755); err != nil {
+			return fmt.Errorf("push decompressed executor binary: %w", err)
+		}
+		return nil
+	default:
+		return fmt.Errorf("unsupported executor compression %q", asset.Compression)
+	}
+}
+
+func (m *ExecutorManager) verifyExecutorBinary(data []byte, asset assets.Asset) error {
+	algorithm := m.executorDigestAlgorithm()
+	want, err := asset.DigestForAlgorithm(algorithm)
+	if err != nil {
+		return fmt.Errorf("select executor %s digest: %w", algorithm, err)
+	}
+	if err := assetmanifest.VerifyDigest(data, want); err != nil {
+		return fmt.Errorf("verify decompressed executor %s digest: %w", algorithm, err)
+	}
+	return nil
+}
+
+func (m *ExecutorManager) remoteCommandAvailable(ctx context.Context, session *transport.Session, commandName string) bool {
+	probe := fmt.Sprintf("if command -v %s >/dev/null 2>&1; then printf yes; fi", shellQuote(commandName))
+	stdin, stdout, err := session.Transport.StartProcess(ctx, probe)
 	if err != nil {
 		return false
 	}
-	defer stdin.Close()
+	_ = stdin.Close()
 
-	scanner := bufio.NewScanner(stdout)
-	if scanner.Scan() {
-		line := scanner.Text()
-		parts := strings.Fields(line)
-		if len(parts) >= 1 && parts[0] == expectedEncodedDigest {
-			stdout.Close()
-			return true
-		}
+	output, readErr := io.ReadAll(stdout)
+	if closeErr := stdout.Close(); closeErr != nil {
+		return false
+	}
+	return readErr == nil && strings.TrimSpace(string(output)) == "yes"
+}
+
+// runTransportCommandWithInput executes command on the remote host, streams
+// input into its stdin, collects the combined output, and reports a non-zero
+// exit status as an error.
+//
+// The remote command is wrapped so that its exit status is appended to stdout
+// as a `__EXIT__:N` sentinel line. This is necessary because
+// transport.Transport.StartProcess does not surface the remote exit code.
+func runTransportCommandWithInput(ctx context.Context, session *transport.Session, command string, input []byte) error {
+	const exitMarker = "__EXIT__"
+	wrapped := fmt.Sprintf("{ %s; } 2>&1; __rc=$?; printf '\\n%s:%%d\\n' \"$__rc\"", command, exitMarker)
+
+	stdin, stdout, err := session.Transport.StartProcess(ctx, wrapped)
+	if err != nil {
+		return err
+	}
+	_, writeErr := io.Copy(stdin, bytes.NewReader(input))
+	closeInputErr := stdin.Close()
+
+	var out bytes.Buffer
+	_, copyErr := io.Copy(&out, stdout)
+	closeOutputErr := stdout.Close()
+
+	if writeErr != nil {
+		return writeErr
+	}
+	if closeInputErr != nil {
+		return closeInputErr
+	}
+	if copyErr != nil {
+		return copyErr
+	}
+	if closeOutputErr != nil {
+		return closeOutputErr
 	}
 
-	stdout.Close()
-	return false
+	body, rc, ok := parseExitMarker(out.Bytes(), exitMarker)
+	if !ok {
+		return fmt.Errorf("remote command did not report exit status; output: %s", strings.TrimSpace(out.String()))
+	}
+	if rc != 0 {
+		trimmed := strings.TrimSpace(string(body))
+		if trimmed == "" {
+			return fmt.Errorf("remote command failed (exit %d)", rc)
+		}
+		return fmt.Errorf("remote command failed (exit %d): %s", rc, trimmed)
+	}
+	return nil
+}
+
+// parseExitMarker scans data for the last "\n<marker>:N\n" sentinel line and
+// returns the bytes preceding the marker, the parsed exit code, and whether
+// the marker was found.
+func parseExitMarker(data []byte, marker string) ([]byte, int, bool) {
+	needle := []byte("\n" + marker + ":")
+	idx := bytes.LastIndex(data, needle)
+	if idx < 0 {
+		return nil, 0, false
+	}
+	tail := data[idx+len(needle):]
+	end := bytes.IndexByte(tail, '\n')
+	if end < 0 {
+		end = len(tail)
+	}
+	rc, err := strconv.Atoi(strings.TrimSpace(string(tail[:end])))
+	if err != nil {
+		return nil, 0, false
+	}
+	return data[:idx], rc, true
 }
 
 // SendPlugin streams a WASM plugin to the executor if it has not already been

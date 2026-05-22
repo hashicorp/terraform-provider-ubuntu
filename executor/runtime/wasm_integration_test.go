@@ -11,7 +11,8 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-provider-ubuntu/executor/capabilities"
-	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
+	"github.com/hashicorp/terraform-provider-ubuntu/executor/runtime/plugincodec"
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 	"github.com/hashicorp/terraform-provider-ubuntu/shared/hostrpc"
 )
 
@@ -30,7 +31,7 @@ func TestWASMAptRepositoryCreatePreservesEmptyLists(t *testing.T) {
 	repoRoot := filepath.Clean(filepath.Join(filepath.Dir(file), "..", ".."))
 	wasmPath := filepath.Join(t.TempDir(), "debian_apt.wasm")
 
-	build := exec.Command("tinygo", "build", "-buildmode=c-shared", "-o", wasmPath, "-target=wasi", "./guest/packs/debian/apt_repository")
+	build := exec.Command("tinygo", "build", "-opt=z", "-buildmode=c-shared", "-o", wasmPath, "-target=wasi", "./guest/packs/debian/apt_repository")
 	build.Dir = repoRoot
 	build.Env = tinygoBuildEnv()
 	output, err := build.CombinedOutput()
@@ -49,7 +50,7 @@ func TestWASMAptRepositoryCreatePreservesEmptyLists(t *testing.T) {
 	if err != nil {
 		t.Fatalf("read built wasm: %v", err)
 	}
-	compressedWasm, err := assets.CompressPluginModule(wasmBytes)
+	compressedWasm, err := plugincodec.CompressPluginModule(wasmBytes)
 	if err != nil {
 		t.Fatalf("CompressPluginModule() returned error: %v", err)
 	}
@@ -74,7 +75,7 @@ func TestWASMAptRepositoryCreatePreservesEmptyLists(t *testing.T) {
 
 	if _, err := dispatcher.LoadModule(hostrpc.ModuleLoadParams{
 		Name:            "debian_apt",
-		WasmCompression: assets.CompressionZstd,
+		WasmCompression: assetmanifest.CompressionZstd,
 		Wasm:            compressedWasm,
 	}); err != nil {
 		t.Fatalf("load compressed plugin: %v", err)

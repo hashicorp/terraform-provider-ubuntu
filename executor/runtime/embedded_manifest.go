@@ -7,7 +7,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assets"
+	"github.com/hashicorp/terraform-provider-ubuntu/providers/shared/assetmanifest"
 )
 
 var (
@@ -15,11 +15,11 @@ var (
 	embeddedManifestProvider string
 
 	embeddedManifestOnce sync.Once
-	embeddedManifest     assets.Manifest
+	embeddedManifest     assetmanifest.Manifest
 	embeddedManifestErr  error
 )
 
-func loadEmbeddedManifest() (assets.Manifest, error) {
+func loadEmbeddedManifest() (assetmanifest.Manifest, error) {
 	embeddedManifestOnce.Do(func() {
 		if strings.TrimSpace(embeddedManifestBase64) == "" {
 			embeddedManifestErr = fmt.Errorf("executor digest manifest not embedded")
@@ -36,7 +36,7 @@ func loadEmbeddedManifest() (assets.Manifest, error) {
 			embeddedManifestErr = fmt.Errorf("unmarshal embedded digest manifest: %w", err)
 			return
 		}
-		if embeddedManifest.Version != assets.ManifestVersion {
+		if embeddedManifest.Version != assetmanifest.ManifestVersion {
 			embeddedManifestErr = fmt.Errorf("unsupported embedded digest manifest version %d", embeddedManifest.Version)
 			return
 		}
