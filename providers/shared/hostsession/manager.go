@@ -232,9 +232,53 @@ func (m *ExecutorManager) executorDir() string {
 	return layout.BasePath
 }
 
+func (m *ExecutorManager) sessionExecutorDir(session *transport.Session) string {
+	basePath := m.executorDir()
+	if session == nil {
+		return basePath
+	}
+	userComponent := sanitizeExecutorPathComponent(session.Config.SSHUser)
+	if userComponent == "" {
+		return basePath
+	}
+	baseDir := path.Dir(basePath)
+	baseName := path.Base(basePath)
+	if baseName == "/" || baseName == "." {
+		return path.Join(basePath, userComponent)
+	}
+	return path.Join(baseDir, fmt.Sprintf("%s-%s", baseName, userComponent))
+}
+
 // executorPath returns the full path to the executor binary on the target.
 func (m *ExecutorManager) executorPath() string {
 	return fmt.Sprintf("%s/%s", m.executorDir(), executorBinName)
+}
+
+func (m *ExecutorManager) sessionExecutorPath(session *transport.Session) string {
+	return fmt.Sprintf("%s/%s", m.sessionExecutorDir(session), executorBinName)
+}
+
+func sanitizeExecutorPathComponent(value string) string {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return ""
+	}
+	var builder strings.Builder
+	for _, r := range value {
+		switch {
+		case r >= 'a' && r <= 'z':
+			builder.WriteRune(r)
+		case r >= 'A' && r <= 'Z':
+			builder.WriteRune(r)
+		case r >= '0' && r <= '9':
+			builder.WriteRune(r)
+		case r == '-', r == '_', r == '.':
+			builder.WriteRune(r)
+		default:
+			builder.WriteByte('_')
+		}
+	}
+	return strings.Trim(builder.String(), "._-")
 }
 
 // EnsureExecutor pushes the executor binary to the target, starts the executor
@@ -304,7 +348,7 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 			return err
 		}
 
-		binPath := m.executorPath()
+		binPath := m.sessionExecutorPath(session)
 		if err := m.pushExecutor(ctx, session, binPath, asset); err != nil {
 			ensureErr = err
 			return ensureErr
