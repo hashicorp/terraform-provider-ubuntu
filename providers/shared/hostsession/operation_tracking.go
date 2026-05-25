@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package hostsession
 
 type OperationMetadata struct {

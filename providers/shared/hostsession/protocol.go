@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package hostsession
 
 import "github.com/hashicorp/terraform-provider-ubuntu/shared/hostrpc"

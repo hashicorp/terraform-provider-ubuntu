@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 // Package plugincodec encapsulates the compression schemes used for executor
 // binaries and WASM plugin modules.
 package plugincodec

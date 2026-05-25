@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 //go:build !windows && !js && !wasm
 
 package runtime
