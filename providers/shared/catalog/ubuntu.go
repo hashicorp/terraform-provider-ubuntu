@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package catalog
 
 func UbuntuDelta() Fragment {
