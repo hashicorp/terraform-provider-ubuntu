@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package capabilities
 
 // HostProfile contains discovered information about the target host.

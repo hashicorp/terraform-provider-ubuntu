@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package systemd
 
 import pluginsdk "github.com/hashicorp/terraform-provider-ubuntu/guest/sdk"

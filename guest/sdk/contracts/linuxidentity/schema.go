@@ -1,3 +1,5 @@
+// Copyright IBM Corp. 2026
+
 package linuxidentity
 
 import "github.com/hashicorp/terraform-provider-ubuntu/guest/sdk"
