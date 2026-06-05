@@ -376,13 +376,20 @@ func (r *GenericResource) Read(ctx context.Context, req resource.ReadRequest, re
 		return
 	}
 
-	result, err := r.send(ctx, "read", hostConfig, &hostsession.OperationMessage{
+	readCtx, cancel := withReadOperationTimeout(ctx)
+	defer cancel()
+
+	result, err := r.send(readCtx, "read", hostConfig, &hostsession.OperationMessage{
 		ModuleName:   r.runtimeModule,
 		ResourceType: r.runtimeType,
 		Action:       "read",
 		State:        stateAttrs,
 	})
 	if err != nil {
+		if readCtx.Err() != nil {
+			resp.Diagnostics.AddError("Read failed", err.Error())
+			return
+		}
 		if shouldDropStateOnReadError(err) {
 			resp.Diagnostics.AddWarning(
 				"Prior host is unreachable during refresh",

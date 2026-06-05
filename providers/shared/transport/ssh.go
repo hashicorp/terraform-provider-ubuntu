@@ -26,8 +26,9 @@ import (
 var _ Transport = (*SSHTransport)(nil)
 
 const (
-	defaultSSHDialTimeout      = 10 * time.Second
-	defaultSSHHandshakeTimeout = 15 * time.Second
+	defaultSSHDialTimeout      = 3 * time.Second
+	defaultSSHHandshakeTimeout = 10 * time.Second
+	defaultSSHOperationTimeout = 30 * time.Second
 	sshShellUploadChunkSize    = 16 << 10
 	sshStderrTailSize          = 16 << 10
 )
@@ -36,11 +37,15 @@ const (
 type SSHTransport struct {
 	config             TransportConfig
 	client             *ssh.Client
+	conn               net.Conn
 	hostKeyFingerprint string
 	dialTimeout        time.Duration
 	handshakeTimeout   time.Duration
+	operationTimeout   time.Duration
+	operationMu        sync.Mutex
 	dialContext        func(context.Context, string, string) (net.Conn, error)
 	newClientConn      func(net.Conn, string, *ssh.ClientConfig) (ssh.Conn, <-chan ssh.NewChannel, <-chan *ssh.Request, error)
+	newSession         func() (sshCommandSession, error)
 	newSFTPClient      func() (sftpUploadClient, error)
 	runCommandFunc     func(context.Context, string) error
 }
@@ -50,6 +55,7 @@ type SSHTransport struct {
 type SSHTransportOptions struct {
 	DialTimeout      time.Duration
 	HandshakeTimeout time.Duration
+	OperationTimeout time.Duration
 }
 
 // NewSSHTransport creates a new SSH transport with the given configuration.
@@ -64,6 +70,7 @@ func NewSSHTransportWithOptions(config TransportConfig, options SSHTransportOpti
 		config:           config,
 		dialTimeout:      normalizeSSHTimeout(options.DialTimeout, defaultSSHDialTimeout),
 		handshakeTimeout: normalizeSSHTimeout(options.HandshakeTimeout, defaultSSHHandshakeTimeout),
+		operationTimeout: normalizeSSHTimeout(options.OperationTimeout, defaultSSHOperationTimeout),
 	}
 }
 
@@ -136,6 +143,7 @@ func (t *SSHTransport) Connect(ctx context.Context) error {
 	clearHandshakeDeadline(true)
 
 	t.client = ssh.NewClient(sshConn, chans, reqs)
+	t.conn = conn
 	transportLogDebug(ctx, "SSH transport connect complete", t.config, map[string]interface{}{
 		"dial_ms":      dialDuration.Milliseconds(),
 		"handshake_ms": time.Since(handshakeStarted).Milliseconds(),
@@ -174,6 +182,55 @@ func (t *SSHTransport) applyHandshakeDeadline(ctx context.Context, conn net.Conn
 	}
 	if err := conn.SetDeadline(deadline); err != nil {
 		return nil, fmt.Errorf("set SSH handshake deadline: %w", err)
+	}
+
+	done := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			_ = conn.SetDeadline(time.Now())
+		case <-done:
+		}
+	}()
+
+	return func(clear bool) {
+		close(done)
+		if clear {
+			_ = conn.SetDeadline(time.Time{})
+		}
+	}, nil
+}
+
+func (t *SSHTransport) withOperationDeadline(ctx context.Context, operation string, fn func() error) error {
+	if t.conn == nil {
+		return fn()
+	}
+
+	t.operationMu.Lock()
+	defer t.operationMu.Unlock()
+
+	clearDeadline, err := t.applyOperationDeadline(ctx, operation)
+	if err != nil {
+		return err
+	}
+	defer clearDeadline(true)
+
+	return fn()
+}
+
+func (t *SSHTransport) applyOperationDeadline(ctx context.Context, operation string) (func(bool), error) {
+	conn := t.conn
+	if conn == nil {
+		return func(bool) {}, nil
+	}
+
+	operationTimeout := normalizeSSHTimeout(t.operationTimeout, defaultSSHOperationTimeout)
+	deadline := time.Now().Add(operationTimeout)
+	if outerDeadline, ok := ctx.Deadline(); ok && outerDeadline.Before(deadline) {
+		deadline = outerDeadline
+	}
+	if err := conn.SetDeadline(deadline); err != nil {
+		return nil, fmt.Errorf("set SSH %s deadline: %w", operation, err)
 	}
 
 	done := make(chan struct{})
@@ -287,7 +344,9 @@ func (t *SSHTransport) PushFile(ctx context.Context, remotePath string, data []b
 		return fmt.Errorf("ssh: not connected")
 	}
 
-	sftpErr := t.pushFileSFTP(remotePath, data, mode)
+	sftpErr := t.withOperationDeadline(ctx, "sftp upload", func() error {
+		return t.pushFileSFTP(remotePath, data, mode)
+	})
 	if sftpErr == nil {
 		return nil
 	}
@@ -387,12 +446,22 @@ func (t *SSHTransport) StartProcess(ctx context.Context, command string) (io.Wri
 		return nil, nil, fmt.Errorf("ssh: not connected")
 	}
 
-	session, err := t.client.NewSession()
+	var stdin io.WriteCloser
+	var stdout io.ReadCloser
+	err := t.withOperationDeadline(ctx, "start process", func() error {
+		session, err := t.newSSHSession()
+		if err != nil {
+			return fmt.Errorf("ssh session: %w", err)
+		}
+
+		stdin, stdout, err = startSSHProcess(session, command)
+		return err
+	})
 	if err != nil {
-		return nil, nil, fmt.Errorf("ssh session: %w", err)
+		return nil, nil, err
 	}
 
-	return startSSHProcess(session, command)
+	return stdin, stdout, nil
 }
 
 func startSSHProcess(session sshProcessSession, command string) (io.WriteCloser, io.ReadCloser, error) {
@@ -446,14 +515,18 @@ func startSSHProcess(session sshProcessSession, command string) (io.WriteCloser,
 
 // Close tears down the SSH connection.
 func (t *SSHTransport) Close() error {
-	if t.client == nil {
+	client := t.client
+	conn := t.conn
+	t.client = nil
+	t.conn = nil
+	if client == nil {
+		if conn != nil {
+			return conn.Close()
+		}
 		return nil
 	}
 
-	err := t.client.Close()
-	t.client = nil
-
-	return err
+	return client.Close()
 }
 
 // TargetArch runs uname -m on the remote host and maps it to a Go arch name.
@@ -462,18 +535,32 @@ func (t *SSHTransport) TargetArch(ctx context.Context) (string, error) {
 		return "", fmt.Errorf("ssh: not connected")
 	}
 
-	session, err := t.client.NewSession()
-	if err != nil {
-		return "", fmt.Errorf("ssh session: %w", err)
-	}
-	defer session.Close()
+	var out []byte
+	err := t.withOperationDeadline(ctx, "target arch", func() error {
+		session, err := t.newSSHSession()
+		if err != nil {
+			return fmt.Errorf("ssh session: %w", err)
+		}
+		defer session.Close()
 
-	out, err := session.Output("uname -m")
+		out, err = session.Output("uname -m")
+		if err != nil {
+			return fmt.Errorf("ssh uname -m: %w", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return "", fmt.Errorf("ssh uname -m: %w", err)
+		return "", err
 	}
 
 	return mapArch(strings.TrimSpace(string(out)))
+}
+
+func (t *SSHTransport) newSSHSession() (sshCommandSession, error) {
+	if t.newSession != nil {
+		return t.newSession()
+	}
+	return t.client.NewSession()
 }
 
 // buildAuthMethods constructs SSH auth methods from the transport config.
@@ -620,13 +707,15 @@ func (t *SSHTransport) runCommand(ctx context.Context, cmd string) error {
 		return t.runCommandFunc(ctx, cmd)
 	}
 
-	session, err := t.client.NewSession()
-	if err != nil {
-		return err
-	}
-	defer session.Close()
+	return t.withOperationDeadline(ctx, "run command", func() error {
+		session, err := t.newSSHSession()
+		if err != nil {
+			return err
+		}
+		defer session.Close()
 
-	return session.Run(cmd)
+		return session.Run(cmd)
+	})
 }
 
 type sftpUploadClient interface {
@@ -671,6 +760,12 @@ type sshProcessSession interface {
 	StdoutPipe() (io.Reader, error)
 	StderrPipe() (io.Reader, error)
 	Start(string) error
+}
+
+type sshCommandSession interface {
+	sshProcessSession
+	Output(string) ([]byte, error)
+	Run(string) error
 }
 
 type boundedTailBuffer struct {

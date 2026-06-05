@@ -15,11 +15,11 @@ import (
 
 const (
 	defaultMaxConns              = 50
-	defaultConnectRetryAttempts  = 30
-	defaultConnectInitialBackoff = 2 * time.Second
-	defaultConnectMaxBackoff     = 10 * time.Second
-	defaultConnectTimeout        = 8 * time.Minute
-	defaultReconnectTimeout      = 8 * time.Minute
+	defaultConnectRetryAttempts  = 120
+	defaultConnectInitialBackoff = 500 * time.Millisecond
+	defaultConnectMaxBackoff     = 3 * time.Second
+	defaultConnectTimeout        = 5 * time.Minute
+	defaultReconnectTimeout      = 1 * time.Minute
 )
 
 type ConnectRetryPolicy struct {
@@ -228,6 +228,14 @@ func (p *ConnectionPool) GetOrCreate(ctx context.Context, hostConfig TransportCo
 				"wait_ms":   time.Since(waitStarted).Milliseconds(),
 			})
 			if err != nil {
+				if shouldRetryAfterInflightConnectFailure(ctx, err) {
+					transportLogDebug(ctx, "retrying SSH session connect after retryable in-flight failure", merged, map[string]interface{}{
+						"cache_key": attemptKey(key),
+						"operation": attempt.op,
+						"error":     err.Error(),
+					})
+					continue
+				}
 				return nil, err
 			}
 			if sess != nil {
@@ -269,6 +277,13 @@ func (p *ConnectionPool) GetOrCreate(ctx context.Context, hostConfig TransportCo
 		}
 		return sess, nil
 	}
+}
+
+func shouldRetryAfterInflightConnectFailure(ctx context.Context, err error) bool {
+	if err == nil || ctx.Err() != nil {
+		return false
+	}
+	return isRetryableConnectError(err)
 }
 
 // Remove removes and closes a session for the given transport config.

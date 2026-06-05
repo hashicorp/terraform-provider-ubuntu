@@ -20,6 +20,8 @@ func transportLogWarn(ctx context.Context, msg string, config TransportConfig, f
 }
 
 func transportLog(ctx context.Context, msg string, config TransportConfig, fields map[string]interface{}, warn bool) {
+	ctx = tflog.NewSubsystem(ctx, transportLogSubsystem, tflog.WithAdditionalLocationOffset(1))
+
 	merged := map[string]interface{}{
 		"target":    config.NormalizedTarget(),
 		"port":      config.ResolvedPort(),
