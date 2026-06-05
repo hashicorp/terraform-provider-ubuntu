@@ -120,7 +120,10 @@ func (d *GenericDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	result, err := sendDataSourceOperation(readCtx, d.executorMgr, d.pool, hostConfig, *op, locks)
 	if err != nil {
 		if readCtx.Err() != nil {
-			resp.Diagnostics.AddError("Read failed", err.Error())
+			resp.Diagnostics.AddError(
+				"Read canceled or timed out",
+				fmt.Sprintf("Read did not complete before the read timeout (%s) or context cancellation: %s", defaultReadOperationTimeout, err.Error()),
+			)
 			return
 		}
 		resp.Diagnostics.AddError("Read failed", err.Error())
