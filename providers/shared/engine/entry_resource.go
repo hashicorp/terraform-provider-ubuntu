@@ -387,7 +387,10 @@ func (r *GenericResource) Read(ctx context.Context, req resource.ReadRequest, re
 	})
 	if err != nil {
 		if readCtx.Err() != nil {
-			resp.Diagnostics.AddError("Read failed", err.Error())
+			resp.Diagnostics.AddError(
+				"Read canceled or timed out",
+				fmt.Sprintf("Read did not complete before the read timeout (%s) or context cancellation: %s", defaultReadOperationTimeout, err.Error()),
+			)
 			return
 		}
 		if shouldDropStateOnReadError(err) {
