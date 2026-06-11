@@ -263,43 +263,43 @@ func (p *BaseProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp 
 				Optional:    true,
 			},
 			"ssh_dial_timeout_seconds": schema.Int64Attribute{
-				Description: "Timeout for each TCP dial attempt while opening an SSH transport connection. Defaults to 10 seconds.",
+				Description: "Timeout for each TCP dial attempt while opening an SSH transport connection. Defaults to 3 seconds.",
 				Optional:    true,
 			},
 			"ssh_handshake_timeout_seconds": schema.Int64Attribute{
-				Description: "Timeout for each SSH protocol handshake after TCP dial succeeds. Defaults to 15 seconds.",
+				Description: "Timeout for each SSH protocol handshake after TCP dial succeeds. Defaults to 10 seconds.",
 				Optional:    true,
 			},
 			"ssh_connect_retry_attempts": schema.Int64Attribute{
-				Description: "Maximum attempts for opening a new pooled SSH session before surfacing failure. Defaults to 30.",
+				Description: "Maximum attempts for opening a new pooled SSH session before surfacing failure. Defaults to 120.",
 				Optional:    true,
 			},
 			"ssh_connect_retry_initial_backoff_ms": schema.Int64Attribute{
-				Description: "Initial retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 2000.",
+				Description: "Initial retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 500.",
 				Optional:    true,
 			},
 			"ssh_connect_retry_max_backoff_ms": schema.Int64Attribute{
-				Description: "Maximum retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 10000.",
+				Description: "Maximum retry backoff in milliseconds for opening a new pooled SSH session. Defaults to 3000.",
 				Optional:    true,
 			},
 			"ssh_connect_retry_timeout_seconds": schema.Int64Attribute{
-				Description: "Total timeout budget in seconds for opening a new pooled SSH session across retries. Defaults to 480.",
+				Description: "Total timeout budget in seconds for opening a new pooled SSH session across retries. Defaults to 300.",
 				Optional:    true,
 			},
 			"ssh_reconnect_retry_attempts": schema.Int64Attribute{
-				Description: "Maximum attempts for reconnecting an existing pooled SSH session before surfacing failure. Defaults to 30.",
+				Description: "Maximum attempts for reconnecting an existing pooled SSH session before surfacing failure. Defaults to 120.",
 				Optional:    true,
 			},
 			"ssh_reconnect_retry_initial_backoff_ms": schema.Int64Attribute{
-				Description: "Initial retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 2000.",
+				Description: "Initial retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 500.",
 				Optional:    true,
 			},
 			"ssh_reconnect_retry_max_backoff_ms": schema.Int64Attribute{
-				Description: "Maximum retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 10000.",
+				Description: "Maximum retry backoff in milliseconds for reconnecting an existing pooled SSH session. Defaults to 3000.",
 				Optional:    true,
 			},
 			"ssh_reconnect_retry_timeout_seconds": schema.Int64Attribute{
-				Description: "Total timeout budget in seconds for reconnecting an existing pooled SSH session across retries. Defaults to 480.",
+				Description: "Total timeout budget in seconds for reconnecting an existing pooled SSH session across retries. Defaults to 60.",
 				Optional:    true,
 			},
 			"host_lock_timeout_seconds": schema.Int64Attribute{

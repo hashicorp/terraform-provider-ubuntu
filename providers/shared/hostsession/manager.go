@@ -384,6 +384,43 @@ func (m *ExecutorManager) EnsureExecutor(ctx context.Context, session *transport
 	return nil
 }
 
+// EnsureExecutorWithReconnect retries executor bootstrap after resetting and
+// reconnecting the transport. It is used before Terraform progress reaches the
+// normal RPC retry path, where a post-auth SSH stall would otherwise fail a
+// single bootstrap attempt without recovery.
+func (m *ExecutorManager) EnsureExecutorWithReconnect(ctx context.Context, session *transport.Session) error {
+	session.BootstrapMu.Lock()
+	defer session.BootstrapMu.Unlock()
+
+	policy := m.getRetryPolicy()
+	var lastErr error
+
+	for attempt := 0; attempt < policy.MaxAttempts; attempt++ {
+		if err := m.EnsureExecutor(ctx, session); err == nil {
+			return nil
+		} else {
+			lastErr = err
+		}
+
+		if attempt == policy.MaxAttempts-1 || m.pool == nil {
+			break
+		}
+
+		backoff := retryBackoff(policy, attempt)
+		if err := m.resetSessionSafely(ctx, session, nil, true, true, reconnectReason(lastErr)); err != nil {
+			lastErr = err
+		}
+		if err := sleepWithContext(ctx, backoff); err != nil {
+			return err
+		}
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("executor ensure failed after %d attempts", policy.MaxAttempts)
+	}
+	return fmt.Errorf("retry executor ensure exhausted after %d attempts: %w", policy.MaxAttempts, lastErr)
+}
+
 func (m *ExecutorManager) pushAndStartExecutor(ctx context.Context, session *transport.Session, asset assets.Asset) (io.WriteCloser, io.ReadCloser, error) {
 	basePath := m.sessionExecutorPath(session)
 	for attempt := 0; attempt <= maxExecutorBusyPathRetries; attempt++ {

@@ -518,7 +518,7 @@ func sendOperation(
 		return nil, fmt.Errorf("get session for %s: %w", hostConfig.Endpoint(), err)
 	}
 
-	if err := manager.EnsureExecutor(ctx, session); err != nil {
+	if err := manager.EnsureExecutorWithReconnect(ctx, session); err != nil {
 		return nil, annotateOperationError(hostConfig, op, fmt.Errorf("ensure executor: %w", err))
 	}
 
