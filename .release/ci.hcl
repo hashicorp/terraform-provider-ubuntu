@@ -1,3 +1,5 @@
+# Copyright IBM Corp. 2026
+
 schema = "1"
 
 project "terraform-provider-ubuntu" {
